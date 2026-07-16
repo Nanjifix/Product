@@ -1,0 +1,2490 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>酷澎 — 商品上架助手</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --red:#FF3B2F;--red-light:#FFF0EF;
+  --green:#22C55E;--green-light:#F0FDF4;
+  --blue:#2563EB;--blue-light:#EEF2FF;
+  --orange:#F97316;--orange-light:#FFF7ED;
+  --purple:#7C3AED;--purple-light:#F5F3FF;
+  --surface:#F5F5F5;--border:#E5E5E5;
+  --text:#111;--sub:#777;--white:#fff;
+  --radius:16px;--radius-sm:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--surface);color:var(--text);overscroll-behavior:none;}
+.screen{display:none;flex-direction:column;height:100vh;overflow:hidden;}
+.screen.active{display:flex;}
+.hdr{background:var(--white);border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.hdr-logo{width:30px;height:30px;border-radius:8px;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:white;flex-shrink:0;}
+.hdr-title{font-size:16px;font-weight:700;}
+.hdr-sub{font-size:11px;color:var(--sub);}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:6px;}
+/* IMPORT */
+#screen-import{overflow-y:auto;}
+.import-wrap{display:flex;justify-content:center;align-items:center;padding:20px;min-height:calc(100vh - 57px);}
+.import-card{background:var(--white);border-radius:var(--radius);padding:24px 22px;width:100%;max-width:480px;box-shadow:0 2px 12px rgba(0,0,0,.08);}
+.import-title{font-size:20px;font-weight:800;margin-bottom:6px;}
+.import-sub{font-size:13px;color:var(--sub);margin-bottom:20px;line-height:1.5;}
+.drop-zone{border:2.5px dashed var(--border);border-radius:var(--radius-sm);padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--red);background:var(--red-light);}
+.drop-icon{font-size:38px;margin-bottom:8px;}
+.drop-label{font-size:14px;font-weight:600;color:var(--sub);}
+.drop-hint{font-size:12px;color:#aaa;margin-top:4px;}
+.col-picker{margin-top:18px;}
+.col-picker-title{font-size:13px;font-weight:700;margin-bottom:9px;color:var(--sub);}
+.col-list{display:flex;flex-wrap:wrap;gap:7px;max-height:180px;overflow-y:auto;padding:2px;}
+.col-chip{padding:6px 12px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text);transition:all .15s;user-select:none;}
+.col-chip.selected{background:var(--red);color:white;border-color:var(--red);}
+.col-preview{margin-top:10px;padding:9px 13px;background:var(--surface);border-radius:var(--radius-sm);font-size:13px;color:var(--sub);min-height:34px;line-height:1.5;}
+.col-preview span{color:var(--text);font-weight:700;}
+.btn{padding:12px 16px;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;border:none;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:5px;}
+.btn:active{transform:scale(.97);}
+.btn-red{background:var(--red);color:white;}
+.btn-ghost{background:var(--surface);color:var(--text);border:1.5px solid var(--border);}
+.btn-green{background:var(--green);color:white;}
+.btn-full{width:100%;margin-top:14px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+/* LIST */
+#screen-list{background:var(--surface);}
+.list-toolbar{background:var(--white);border-bottom:1px solid var(--border);padding:10px 12px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.search-row{display:flex;gap:8px;}
+.search-input{flex:1;padding:9px 14px;border:1.5px solid var(--border);border-radius:20px;font-size:14px;background:var(--surface);outline:none;color:var(--text);}
+.search-input:focus{border-color:var(--blue);background:white;}
+.filter-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
+.filter-label{font-size:11px;color:var(--sub);font-weight:600;white-space:nowrap;}
+.fc{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--sub);transition:all .15s;}
+.fc.on-g{background:var(--green-light);color:var(--green);border-color:rgba(34,197,94,.3);}
+.fc.on-o{background:var(--orange-light);color:var(--orange);border-color:rgba(249,115,22,.3);}
+.fc.act-g{background:var(--green);color:white;border-color:var(--green);}
+.fc.act-o{background:var(--orange);color:white;border-color:var(--orange);}
+.fc.act-a{background:var(--text);color:white;border-color:var(--text);}
+.list-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.list-count{font-size:11px;color:var(--sub);padding:8px 14px 4px;font-weight:600;}
+.prod-row{background:var(--white);margin:4px 10px;border-radius:var(--radius-sm);padding:11px 13px;display:flex;align-items:center;gap:9px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:transform .1s;}
+.prod-row:active{transform:scale(.98);}
+.prod-num{font-size:11px;color:#bbb;font-weight:700;width:26px;flex-shrink:0;text-align:right;}
+.prod-name{flex:1;min-width:0;font-size:14px;font-weight:600;}
+.prod-name-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.prod-badges{display:flex;gap:4px;flex-shrink:0;}
+.badge{width:22px;height:22px;border-radius:6px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.b-z{background:var(--green-light);color:var(--green);}
+.b-f{background:var(--blue-light);color:var(--blue);}
+.b-e{background:var(--surface);color:#ccc;border:1.5px solid var(--border);}
+.prod-arrow{font-size:14px;color:#ccc;}
+.export-bar{background:var(--white);border-top:1px solid var(--border);padding:10px 12px;display:flex;gap:8px;flex-shrink:0;align-items:center;}
+.export-label{font-size:12px;color:var(--sub);font-weight:600;flex-shrink:0;}
+.export-btn{flex:1;padding:10px 8px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .2s;}
+.export-btn:active{transform:scale(.97);}
+.btn-zip{background:var(--orange-light);color:var(--orange);border:1.5px solid rgba(249,115,22,.25);}
+.btn-drive{background:var(--green-light);color:var(--green);border:1.5px solid rgba(34,197,94,.25);}
+.btn-drive.on{background:var(--green);color:white;}
+.drive-dot{display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:12px;background:var(--green-light);color:var(--green);}
+/* SHOOT */
+#screen-shoot{background:var(--surface);}
+.shoot-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px;display:flex;flex-direction:column;gap:12px;}
+.shoot-pname{font-size:15px;font-weight:700;max-width:calc(100vw - 120px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.shoot-psub{font-size:11px;color:var(--sub);}
+.scard{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.scard-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.scard-badge{width:28px;height:28px;border-radius:8px;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sbz{background:var(--green-light);color:var(--green);}
+.sbf{background:var(--blue-light);color:var(--blue);}
+.scard-title{font-size:15px;font-weight:700;}
+.scard-st{margin-left:auto;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;}
+.st-done{background:var(--green-light);color:var(--green);}
+.st-pend{background:var(--surface);color:var(--sub);}
+.fn-tag{font-size:11px;color:var(--sub);font-family:monospace;margin-bottom:10px;padding:5px 9px;background:var(--surface);border-radius:6px;word-break:break-all;}
+/* Photo source buttons for 中標 */
+.src-row{display:flex;gap:8px;margin-bottom:10px;}
+.src-btn{flex:1;padding:11px 8px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text);display:flex;align-items:center;justify-content:center;gap:5px;transition:all .15s;}
+.src-btn:active{transform:scale(.97);}
+.src-btn.prim{background:var(--red);color:white;border-color:var(--red);}
+/* Shared photo box */
+.photo-box{width:100%;border-radius:var(--radius-sm);overflow:hidden;cursor:pointer;border:2px dashed var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;transition:all .2s;position:relative;}
+.photo-box.done{border-style:solid;border-color:var(--green);}
+.photo-box:active{transform:scale(.98);}
+.photo-box img{width:100%;height:100%;object-fit:cover;}
+.ph-placeholder{text-align:center;padding:28px 16px;color:var(--sub);}
+.ph-icon{font-size:28px;margin-bottom:6px;}
+.ph-txt{font-size:13px;font-weight:600;}
+.ph-hint{font-size:11px;margin-top:3px;color:#aaa;}
+.photo-retake{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:white;font-size:11px;font-weight:700;padding:4px 10px;border-radius:12px;}
+.ann-btn{margin-top:8px;width:100%;padding:10px;border-radius:var(--radius-sm);background:var(--red-light);color:var(--red);border:1.5px solid rgba(255,59,47,.2);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+/* Edit bar for封面 */
+.edit-bar{margin-top:8px;display:flex;gap:8px;}
+.edit-btn{flex:1;padding:9px;border-radius:var(--radius-sm);font-size:12px;font-weight:700;cursor:pointer;background:var(--blue-light);color:var(--blue);border:1.5px solid rgba(37,99,235,.2);display:flex;align-items:center;justify-content:center;gap:4px;}
+.shoot-save-row{display:flex;gap:10px;padding:12px;flex-shrink:0;background:var(--white);border-top:1px solid var(--border);}
+/* AI name row */
+.name-row{margin-top:10px;}
+.name-lbl{font-size:11px;font-weight:700;color:var(--sub);margin-bottom:4px;}
+.name-inp{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;background:var(--surface);outline:none;color:var(--text);}
+/* ── CAMERA MODAL ── */
+.full-modal{position:fixed;inset:0;z-index:200;background:#000;display:none;flex-direction:column;}
+.full-modal.open{display:flex;}
+#cam-video{flex:1;width:100%;object-fit:cover;}
+#cam-prev-img{width:100%;flex:1;object-fit:contain;display:none;}
+.cam-hint{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:white;font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;white-space:nowrap;z-index:5;}
+.cam-bar{background:rgba(0,0,0,.85);padding:14px 24px 36px;display:flex;align-items:center;justify-content:space-between;}
+.cam-cancel{color:white;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;}
+.cam-shutter{width:68px;height:68px;border-radius:50%;border:4px solid white;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.cam-shutter:active{transform:scale(.92);}
+.cam-shutter-inner{width:52px;height:52px;border-radius:50%;background:white;}
+.cam-confirm-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px 36px;background:rgba(0,0,0,.85);}
+.cam-retake{color:#FFCC00;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;}
+.cam-ok{color:white;font-size:15px;font-weight:700;background:var(--green);border:none;padding:12px 24px;border-radius:var(--radius-sm);cursor:pointer;}
+/* ── CROP MODAL ── */
+#crop-modal{position:fixed;inset:0;z-index:210;background:#000;display:none;flex-direction:column;}
+#crop-modal.open{display:flex;}
+.crop-hdr{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.85);}
+.crop-title{color:white;font-size:15px;font-weight:700;}
+.crop-hint{color:rgba(255,255,255,.55);font-size:11px;margin-top:2px;}
+.crop-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#1a1a1a;}
+#crop-canvas{display:block;touch-action:none;}
+/* Crop overlay: darkened outside square */
+.crop-overlay{position:absolute;inset:0;pointer-events:none;}
+.crop-tools{background:rgba(0,0,0,.85);padding:10px 16px;display:flex;gap:10px;justify-content:center;}
+.crop-tool-btn{padding:9px 16px;border-radius:20px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:rgba(255,255,255,.12);color:white;}
+.crop-actions{display:flex;gap:10px;padding:10px 16px 36px;background:rgba(0,0,0,.85);}
+.crop-cancel-btn{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid rgba(255,255,255,.2);background:none;color:rgba(255,255,255,.7);font-size:14px;font-weight:700;cursor:pointer;}
+.crop-ok-btn{flex:2;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--green);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+/* ── ADJUST MODAL ── */
+#adjust-modal{position:fixed;inset:0;z-index:220;background:#111;display:none;flex-direction:column;}
+#adjust-modal.open{display:flex;}
+.adj-hdr{padding:14px 16px;text-align:center;background:rgba(0,0,0,.8);}
+.adj-title{color:white;font-size:15px;font-weight:700;}
+.adj-hint{color:rgba(255,255,255,.5);font-size:11px;margin-top:2px;}
+.adj-preview{flex:1;display:flex;align-items:center;justify-content:center;background:#1a1a1a;position:relative;overflow:hidden;}
+#adj-canvas{max-width:100%;max-height:100%;display:block;}
+.adj-proc{position:absolute;color:rgba(255,255,255,.6);font-size:13px;font-weight:600;}
+.adj-controls{background:rgba(0,0,0,.9);padding:14px 16px;}
+.adj-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.adj-lbl{font-size:12px;font-weight:700;color:rgba(255,255,255,.6);width:52px;flex-shrink:0;}
+.adj-slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.2);outline:none;}
+.adj-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:white;cursor:pointer;}
+.adj-val{font-size:12px;font-weight:700;color:white;width:36px;text-align:right;}
+.adj-actions{display:flex;gap:10px;padding:10px 16px 36px;background:rgba(0,0,0,.9);}
+.adj-cancel{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid rgba(255,255,255,.2);background:none;color:rgba(255,255,255,.7);font-size:14px;font-weight:700;cursor:pointer;}
+.adj-reset{flex:1;padding:13px;border-radius:var(--radius-sm);border:none;background:rgba(255,255,255,.12);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+.adj-ok{flex:2;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--green);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+/* ── ANNOTATE MODAL ── */
+#ann-modal{position:fixed;inset:0;z-index:300;background:#111;display:none;flex-direction:column;}
+#ann-modal.open{display:flex;}
+.ann-hdr{padding:12px 16px 6px;text-align:center;}
+.ann-title{color:white;font-size:15px;font-weight:700;}
+.ann-hint{color:rgba(255,255,255,.55);font-size:12px;margin-top:3px;}
+.color-row{display:flex;justify-content:center;gap:10px;padding:8px 16px;}
+.csw{width:30px;height:30px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:all .15s;flex-shrink:0;}
+.csw.active{border-color:white;transform:scale(1.2);}
+.brush-row{display:flex;align-items:center;justify-content:center;gap:12px;padding:4px 16px 8px;}
+.brush-lbl{color:rgba(255,255,255,.45);font-size:11px;}
+.brush-dot{border:2px solid rgba(255,255,255,.3);border-radius:50%;cursor:pointer;background:white;transition:all .15s;flex-shrink:0;}
+.brush-dot.active{border-color:white;transform:scale(1.15);}
+.ann-cw{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+#ann-canvas{display:block;touch-action:none;max-width:100%;max-height:100%;}
+.ann-tools{display:flex;gap:8px;padding:8px 16px;justify-content:center;}
+.tool-btn{padding:8px 14px;border-radius:20px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:rgba(255,255,255,.12);color:white;}
+.tool-btn.on{background:rgba(255,255,255,.35);}
+.ann-actions{display:flex;gap:10px;padding:10px 16px 32px;}
+.ann-cancel{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid rgba(255,255,255,.2);background:none;color:rgba(255,255,255,.7);font-size:14px;font-weight:700;cursor:pointer;}
+.ann-ok{flex:2;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--red);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+.ann-loading{position:absolute;inset:0;background:rgba(0,0,0,.75);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:5;}
+.ann-loading.open{display:flex;}
+/* ── ERASE MODAL ── */
+#erase-modal{position:fixed;inset:0;z-index:320;background:#111;display:none;flex-direction:column;}
+#erase-modal.open{display:flex;}
+.erase-hdr{padding:12px 16px 8px;background:rgba(0,0,0,.85);flex-shrink:0;}
+.erase-title{color:white;font-size:15px;font-weight:700;}
+.erase-hint{color:rgba(255,255,255,.5);font-size:11px;margin-top:2px;line-height:1.5;}
+.erase-canvas-wrap{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#1a1a1a;}
+#erase-canvas{display:block;touch-action:none;max-width:100%;max-height:100%;}
+.erase-toolbar{background:rgba(0,0,0,.9);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;}
+.erase-brush-row{display:flex;align-items:center;gap:8px;}
+.erase-brush-lbl{color:rgba(255,255,255,.5);font-size:11px;font-weight:600;white-space:nowrap;}
+.erase-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:all .15s;flex-shrink:0;}
+.erase-swatch.active{border-color:white;transform:scale(1.2);}
+.eb-dot{border:2px solid rgba(255,255,255,.3);border-radius:50%;background:rgba(255,100,100,.8);cursor:pointer;transition:all .15s;flex-shrink:0;}
+.eb-dot.active{border-color:white;transform:scale(1.15);}
+.erase-tool-btn{padding:7px 13px;border-radius:20px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:rgba(255,255,255,.12);color:white;white-space:nowrap;}
+.erase-tool-btn.on{background:rgba(255,255,255,.35);}
+.erase-actions{display:flex;gap:10px;padding:10px 16px 36px;background:rgba(0,0,0,.9);flex-shrink:0;}
+.erase-cancel-btn{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid rgba(255,255,255,.2);background:none;color:rgba(255,255,255,.7);font-size:14px;font-weight:700;cursor:pointer;}
+.erase-ok-btn{flex:2;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--green);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+/* ── RENDER MODAL ── */
+#render-modal{position:fixed;inset:0;z-index:330;background:#0a0a0a;display:none;flex-direction:column;}
+#render-modal.open{display:flex;}
+.render-hdr{padding:12px 16px 8px;background:rgba(0,0,0,.9);flex-shrink:0;}
+.render-title{color:white;font-size:15px;font-weight:700;}
+.render-hint{color:rgba(255,255,255,.5);font-size:11px;margin-top:2px;line-height:1.5;}
+.render-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;display:flex;flex-direction:column;gap:12px;}
+.render-preview-row{display:flex;gap:10px;}
+.render-img-box{flex:1;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#1a1a1a;position:relative;display:flex;align-items:center;justify-content:center;}
+.render-img-box img{width:100%;height:100%;object-fit:contain;}
+.render-img-lbl{position:absolute;bottom:6px;left:6px;font-size:10px;font-weight:700;color:white;background:rgba(0,0,0,.6);padding:2px 8px;border-radius:8px;}
+.render-section{background:rgba(255,255,255,.05);border-radius:10px;padding:12px;}
+.render-section-title{color:rgba(255,255,255,.7);font-size:11px;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;}
+.render-option{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s;}
+.render-option:active{background:rgba(255,255,255,.08);}
+.render-option input[type=radio]{accent-color:#7C3AED;width:16px;height:16px;flex-shrink:0;}
+.render-option-label{font-size:13px;font-weight:600;color:white;}
+.render-option-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px;}
+.render-prompt-box{width:100%;padding:10px 12px;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;font-size:13px;color:white;outline:none;resize:none;min-height:80px;font-family:inherit;}
+.render-prompt-box:focus{border-color:rgba(124,58,237,.7);}
+.render-log{background:rgba(0,0,0,.4);border-radius:8px;padding:10px 12px;font-size:11px;color:rgba(255,255,255,.55);line-height:1.7;min-height:40px;font-family:monospace;}
+.render-actions{display:flex;gap:10px;padding:12px 16px 36px;background:rgba(0,0,0,.9);flex-shrink:0;}
+.render-cancel-btn{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid rgba(255,255,255,.2);background:none;color:rgba(255,255,255,.7);font-size:14px;font-weight:700;cursor:pointer;}
+.render-go-btn{flex:3;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--purple);color:white;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+.render-go-btn:disabled{opacity:.5;cursor:not-allowed;}
+.render-save-btn{flex:2;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--green);color:white;font-size:14px;font-weight:700;cursor:pointer;display:none;}
+/* ── SHADOW MODAL ── */
+#shadow-modal{position:fixed;inset:0;z-index:320;background:#111;display:none;flex-direction:column;}
+#shadow-modal.open{display:flex;}
+.shadow-hdr{padding:12px 16px 8px;background:rgba(0,0,0,.85);flex-shrink:0;}
+.shadow-title{color:white;font-size:15px;font-weight:700;}
+.shadow-hint{color:rgba(255,255,255,.5);font-size:11px;margin-top:2px;line-height:1.5;}
+.shadow-preview{flex:1;display:flex;align-items:center;justify-content:center;background:#1a1a1a;position:relative;}
+#shadow-canvas{max-width:100%;max-height:100%;display:block;}
+.shadow-loading{position:absolute;inset:0;background:rgba(0,0,0,.65);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;}
+.shadow-loading.show{display:flex;}
+.shadow-controls{background:rgba(0,0,0,.9);padding:12px 16px;flex-shrink:0;}
+.shadow-ctrl-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.shadow-lbl{font-size:12px;font-weight:700;color:rgba(255,255,255,.6);width:64px;flex-shrink:0;}
+.shadow-slider{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:rgba(255,255,255,.2);outline:none;}
+.shadow-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:white;cursor:pointer;}
+.shadow-val{font-size:12px;font-weight:700;color:white;width:36px;text-align:right;}
+.shadow-actions{display:flex;gap:10px;padding:10px 16px 36px;background:rgba(0,0,0,.9);flex-shrink:0;}
+.shadow-cancel-btn{flex:1;padding:13px;border-radius:var(--radius-sm);border:1.5px solid rgba(255,255,255,.2);background:none;color:rgba(255,255,255,.7);font-size:14px;font-weight:700;cursor:pointer;}
+.shadow-reset-btn{flex:1;padding:13px;border-radius:var(--radius-sm);border:none;background:rgba(255,255,255,.12);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+.shadow-ok-btn{flex:2;padding:13px;border-radius:var(--radius-sm);border:none;background:var(--green);color:white;font-size:14px;font-weight:700;cursor:pointer;}
+/* ── DRIVE MODAL ── */
+#drive-modal{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;}
+#drive-modal.open{display:flex;}
+.drive-sheet{background:var(--white);border-radius:20px 20px 0 0;padding:24px 20px 40px;width:100%;max-width:520px;}
+.drive-title{font-size:17px;font-weight:800;margin-bottom:6px;}
+.drive-sub{font-size:13px;color:var(--sub);margin-bottom:18px;line-height:1.5;}
+.drive-folder-row{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface);border-radius:var(--radius-sm);margin-bottom:12px;}
+.drive-folder-name{font-size:14px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.drive-folder-change{font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;flex-shrink:0;}
+.drive-info{font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.7;}
+.drive-info b{color:var(--text);}
+.drive-btns{display:flex;gap:10px;}
+/* TOAST & OVERLAY */
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#111;color:white;font-size:13px;font-weight:600;padding:9px 18px;border-radius:24px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+.toast.show{opacity:1;}
+.spinner{width:42px;height:42px;border:4px solid rgba(255,255,255,.2);border-top-color:var(--red);border-radius:50%;animation:spin .8s linear infinite;}
+.spin-sm{width:20px;height:20px;border:3px solid rgba(255,255,255,.2);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-txt{color:white;font-size:14px;font-weight:600;}
+#prog-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;}
+#prog-overlay.open{display:flex;}
+.prog-box{background:white;border-radius:var(--radius);padding:24px 28px;width:280px;text-align:center;}
+.prog-title{font-size:15px;font-weight:700;margin-bottom:10px;}
+.prog-bar-wrap{background:var(--surface);border-radius:8px;height:8px;overflow:hidden;margin-bottom:8px;}
+.prog-bar{height:8px;background:var(--green);border-radius:8px;transition:width .3s;}
+.prog-txt{font-size:12px;color:var(--sub);}
+canvas#scratch{display:none;}
+</style>
+</head>
+<body>
+<canvas id="scratch"></canvas>
+<div class="toast" id="toast"></div>
+<div id="prog-overlay" >
+  <div class="prog-box">
+    <div class="prog-title" id="prog-title">處理中...</div>
+    <div class="prog-bar-wrap"><div class="prog-bar" id="prog-bar" style="width:0%"></div></div>
+    <div class="prog-txt" id="prog-txt"></div>
+  </div>
+</div>
+
+<!-- ════ IMPORT ════ -->
+<div class="screen active" id="screen-import">
+  <div class="hdr">
+    <div class="hdr-logo">KP</div>
+    <div><div class="hdr-title">酷澎上架助手</div><div class="hdr-sub">廠商商品資料準備</div></div>
+  </div>
+  <div class="import-wrap">
+  <div class="import-card">
+    <div class="import-title">📂 匯入商品清單</div>
+    <div class="import-sub">上傳 Excel，選擇品名欄位後逐一拍攝中標照片與白底封面照。所有照片輸出為 1000×1000 像素。</div>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-inp').click()">
+      <div class="drop-icon">📊</div><div class="drop-label">點擊選取 Excel 檔案</div><div class="drop-hint">.xlsx · .xls · .csv</div>
+    </div>
+    <input type="file" id="file-inp" accept=".xlsx,.xls,.csv" style="display:none"/>
+    <div id="col-picker" style="display:none">
+      <div class="col-picker" style="margin-top:18px;">
+        <div class="col-picker-title">選擇品名欄位（可多選，多選以 _ 合併）</div>
+        <div class="col-list" id="col-list"></div>
+        <div class="col-preview" id="col-preview">請選擇欄位</div>
+      </div>
+    </div>
+    <button class="btn btn-red btn-full" id="import-btn" disabled onclick="doImport()">開始作業 →</button>
+  </div>
+  </div>
+</div>
+
+<!-- ════ LIST ════ -->
+<div class="screen" id="screen-list">
+  <div class="hdr">
+    <div class="hdr-logo">KP</div>
+    <div><div class="hdr-title" id="list-title">商品清單</div><div class="hdr-sub" id="list-sub">0 項</div></div>
+    <div class="hdr-right">
+      <div class="drive-dot" id="drive-dot">☁ 同步中</div>
+      <button class="btn btn-ghost" style="padding:6px 10px;font-size:12px;" onclick="goImport()">重新匯入</button>
+    </div>
+  </div>
+  <div class="list-toolbar">
+    <div class="search-row">
+      <input class="search-input" id="search-inp" placeholder="🔍 搜尋品名..." oninput="renderList()" autocomplete="off"/>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">篩選：</span>
+      <button class="fc act-a" id="fc-all" onclick="setFilter('all')">全部</button>
+      <button class="fc on-g" id="fc-zd" onclick="setFilter('z-done')">中 ✓</button>
+      <button class="fc on-o" id="fc-zn" onclick="setFilter('z-no')">中 ✗</button>
+      <button class="fc on-g" id="fc-fd" onclick="setFilter('f-done')">封 ✓</button>
+      <button class="fc on-o" id="fc-fn" onclick="setFilter('f-no')">封 ✗</button>
+    </div>
+  </div>
+  <div class="list-scroll">
+    <div class="list-count" id="list-count"></div>
+    <div id="prod-list"></div>
+    <div style="height:10px"></div>
+  </div>
+  <div class="export-bar">
+    <span class="export-label">匯出：</span>
+    <button class="export-btn btn-zip" onclick="downloadZip()">⬇ ZIP</button>
+    <button class="export-btn btn-drive" id="drive-btn" onclick="openDriveModal()">☁ Google Drive</button>
+  </div>
+</div>
+
+<!-- ════ SHOOT ════ -->
+<div class="screen" id="screen-shoot">
+  <div class="hdr">
+    <button onclick="goList()" style="background:none;border:none;font-size:22px;cursor:pointer;padding:0 6px 0 0;color:var(--text);">‹</button>
+    <div style="flex:1;min-width:0;">
+      <div class="shoot-pname" id="shoot-name">品名</div>
+      <div class="shoot-psub" id="shoot-idx">—</div>
+    </div>
+  </div>
+  <div class="shoot-scroll">
+    <!-- 中標 -->
+    <div class="scard">
+      <div class="scard-head">
+        <div class="scard-badge sbz">中</div>
+        <div class="scard-title">中標照片</div>
+        <div class="scard-st st-pend" id="z-st">未完成</div>
+      </div>
+      <div class="fn-tag" id="z-fn">📄 —</div>
+      <!-- Single tap target opens source picker -->
+      <div class="photo-box" id="z-box" style="min-height:150px;">
+        <div class="ph-placeholder"><div class="ph-icon">🏷️</div><div class="ph-txt">點擊新增中標照片</div><div class="ph-hint">拍攝 · 選取檔案 · 複用已有</div></div>
+      </div>
+      <div id="z-ann-row" style="display:none"><button class="ann-btn" onclick="openAnnotate()">✏️ 圈選品名後 AI 辨識</button></div>
+      <div class="name-row" id="z-name-row" style="display:none">
+        <div class="name-lbl">辨識到的品名</div>
+        <input class="name-inp" id="z-name-inp" placeholder="AI 辨識或手動輸入" type="text"/>
+      </div>
+    </div>
+    <!-- 封面照 -->
+    <div class="scard">
+      <div class="scard-head">
+        <div class="scard-badge sbf">封</div>
+        <div class="scard-title">白底封面照</div>
+        <div class="scard-st st-pend" id="f-st">未完成</div>
+      </div>
+      <div class="fn-tag" id="f-fn">📄 —</div>
+      <div class="photo-box" id="f-box" style="aspect-ratio:1/1;">
+        <div class="ph-placeholder"><div class="ph-icon">📦</div><div class="ph-txt">點擊新增白底封面照</div><div class="ph-hint">拍攝 · 選取檔案 · 自動去背白底</div></div>
+      </div>
+      <div class="edit-bar" id="f-edit-bar" style="display:none">
+        <button class="edit-btn" onclick="openRenderModal()">✨ AI 重新渲染</button>
+        <button class="edit-btn" onclick="openEraseModal()">✂️ 調整去背</button>
+        <button class="edit-btn" onclick="openShadowModal()">🌫 陰影變淡</button>
+        <button class="edit-btn" onclick="openAdjust()">🎨 調整色彩</button>
+      </div>
+      <!-- API Keys -->
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
+        <!-- OpenAI key (for AI render) -->
+        <div style="padding:10px 12px;background:var(--surface);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);">✨ AI 重新渲染（OpenAI GPT-Image）</div>
+            <div id="oai-status" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--surface);color:var(--sub);">未設定</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <input id="oai-key-inp" type="password" placeholder="貼上 OpenAI API Key（sk-...）" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;background:white;outline:none;color:var(--text);"/>
+            <button onclick="saveOaiKey()" style="padding:8px 12px;border-radius:var(--radius-sm);border:none;background:var(--purple);color:white;font-size:12px;font-weight:700;cursor:pointer;">儲存</button>
+          </div>
+          <div style="font-size:11px;color:#aaa;line-height:1.5;"><a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--blue);">取得 OpenAI API Key →</a>　需要 GPT-Image-1 存取權限。</div>
+        </div>
+        <!-- remove.bg key -->
+        <div id="removebg-row" style="padding:10px 12px;background:var(--surface);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:11px;font-weight:700;color:var(--sub);">🤖 AI 去背（remove.bg）</div>
+            <div id="rbg-status" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--surface);color:var(--sub);">未設定</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <input id="rbg-key-inp" type="password" placeholder="貼上 remove.bg API Key" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;background:white;outline:none;color:var(--text);"/>
+            <button onclick="saveRemoveBgKey()" style="padding:8px 12px;border-radius:var(--radius-sm);border:none;background:var(--blue);color:white;font-size:12px;font-weight:700;cursor:pointer;">儲存</button>
+          </div>
+          <div style="font-size:11px;color:#aaa;line-height:1.5;">免費方案每月 50 張。<a href="https://www.remove.bg/api" target="_blank" style="color:var(--blue);">取得 API Key →</a></div>
+        </div>
+      </div>
+    </div>
+    <div style="height:8px"></div>
+  </div>
+  <div class="shoot-save-row">
+    <button class="btn btn-ghost" style="flex:1" onclick="goList()">返回清單</button>
+    <button class="btn btn-red" style="flex:2" onclick="saveProduct()">✅ 儲存此商品</button>
+  </div>
+</div>
+
+<!-- ════ CAMERA MODAL ════ -->
+<div class="full-modal" id="cam-modal">
+  <div class="cam-hint" id="cam-hint">對準商品</div>
+  <video id="cam-video" autoplay playsinline></video>
+  <!-- Square guide overlay for 封面 mode -->
+  <div id="cam-square-guide" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
+    <canvas id="cam-guide-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
+  </div>
+  <img id="cam-prev-img" alt=""/>
+  <div id="cam-shoot-bar" class="cam-bar">
+    <button class="cam-cancel" onclick="closeCam()">取消</button>
+    <button class="cam-shutter" onclick="shootPhoto()"><div class="cam-shutter-inner"></div></button>
+    <div style="width:60px"></div>
+  </div>
+  <div id="cam-confirm-bar" class="cam-confirm-bar" style="display:none">
+    <button class="cam-retake" onclick="retakePhoto()">🔄 重新拍攝</button>
+    <button class="cam-ok" id="cam-ok-btn" onclick="confirmCamPhoto()">確認 ✓</button>
+  </div>
+</div>
+
+<!-- ════ CROP MODAL ════ -->
+<div id="crop-modal">
+  <div class="crop-hdr">
+    <div>
+      <div class="crop-title" id="crop-title-txt">裁切照片</div>
+      <div class="crop-hint" id="crop-hint-txt">拖曳方框選取範圍・拖曳圖片調整位置</div>
+    </div>
+  </div>
+  <div class="crop-wrap" id="crop-wrap">
+    <canvas id="crop-canvas"></canvas>
+  </div>
+  <div class="crop-tools">
+    <button class="crop-tool-btn" id="crop-rotate-btn" onclick="cropRotate(-90)">↺ 旋轉</button>
+    <button class="crop-tool-btn" onclick="cropZoom(1.15)" id="crop-zoom-in">＋ 放大圖</button>
+    <button class="crop-tool-btn" onclick="cropZoom(0.87)" id="crop-zoom-out">－ 縮小圖</button>
+    <button class="crop-tool-btn" onclick="cropReset()">重設</button>
+  </div>
+  <div class="crop-actions">
+    <button class="crop-cancel-btn" onclick="closeCrop()">取消</button>
+    <button class="crop-ok-btn" onclick="confirmCrop()">確認照片 ✓</button>
+  </div>
+</div>
+
+<!-- ════ ADJUST MODAL ════ -->
+<div id="adjust-modal">
+  <div class="adj-hdr">
+    <div class="adj-title">🎨 調整封面照</div>
+    <div class="adj-hint">滑桿調整後即時預覽，滿意後按確認</div>
+  </div>
+  <div class="adj-preview">
+    <canvas id="adj-canvas"></canvas>
+    <div class="adj-proc hidden" id="adj-proc">處理中...</div>
+  </div>
+  <div class="adj-controls">
+    <div class="adj-row">
+      <span class="adj-lbl">曝光</span>
+      <input class="adj-slider" type="range" id="sl-exp" min="-100" max="100" value="0" oninput="adjPreview()"/>
+      <span class="adj-val" id="sv-exp">0</span>
+    </div>
+    <div class="adj-row">
+      <span class="adj-lbl">對比</span>
+      <input class="adj-slider" type="range" id="sl-con" min="-100" max="100" value="0" oninput="adjPreview()"/>
+      <span class="adj-val" id="sv-con">0</span>
+    </div>
+    <div class="adj-row">
+      <span class="adj-lbl">白平衡</span>
+      <input class="adj-slider" type="range" id="sl-wb" min="-100" max="100" value="0" oninput="adjPreview()"/>
+      <span class="adj-val" id="sv-wb">0</span>
+    </div>
+    <div class="adj-row">
+      <span class="adj-lbl">飽和度</span>
+      <input class="adj-slider" type="range" id="sl-sat" min="-100" max="100" value="0" oninput="adjPreview()"/>
+      <span class="adj-val" id="sv-sat">0</span>
+    </div>
+  </div>
+  <div class="adj-actions">
+    <button class="adj-cancel" onclick="closeAdjust()">取消</button>
+    <button class="adj-reset" onclick="adjReset()">重設</button>
+    <button class="adj-ok" onclick="confirmAdjust()">套用 ✓</button>
+  </div>
+</div>
+
+<!-- ════ F SOURCE PICKER ════ -->
+<div id="fpicker-modal" style="position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeFPicker()">
+  <div style="background:var(--white);border-radius:20px 20px 0 0;width:100%;max-width:520px;overflow:hidden;">
+    <div style="padding:20px 16px 16px;">
+      <div style="font-size:16px;font-weight:800;margin-bottom:4px;">白底封面照</div>
+      <div style="font-size:13px;color:var(--sub);margin-bottom:16px;">選擇照片來源，系統會自動修正白底去背</div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="closeFPicker();openCamera('f')" style="flex:1;padding:14px 8px;border-radius:var(--radius-sm);border:none;background:var(--blue);color:white;font-size:14px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <span style="font-size:22px;">📷</span><span>拍攝</span>
+        </button>
+        <button onclick="closeFPicker();pickFile('f')" style="flex:1;padding:14px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <span style="font-size:22px;">📁</span><span>選取檔案</span>
+        </button>
+      </div>
+    </div>
+    <div style="padding:0 16px 36px;">
+      <button onclick="closeFPicker()" style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:none;font-size:14px;font-weight:600;cursor:pointer;color:var(--sub);">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ ANNOTATE MODAL ════ -->
+<div id="ann-modal">
+  <div class="ann-hdr">
+    <div class="ann-title">✏️ 圈選品名區域</div>
+    <div class="ann-hint">用手指塗色標記品名文字，AI 只辨識標記範圍</div>
+  </div>
+  <div class="color-row">
+    <div class="csw active" style="background:#FF3B2F" data-c="#FF3B2F" onclick="setAnnColor(this)"></div>
+    <div class="csw" style="background:#FFCC00" data-c="#FFCC00" onclick="setAnnColor(this)"></div>
+    <div class="csw" style="background:#34C759" data-c="#34C759" onclick="setAnnColor(this)"></div>
+    <div class="csw" style="background:#007AFF" data-c="#007AFF" onclick="setAnnColor(this)"></div>
+    <div class="csw" style="background:#FF6EC7" data-c="#FF6EC7" onclick="setAnnColor(this)"></div>
+  </div>
+  <div class="brush-row">
+    <span class="brush-lbl">筆刷</span>
+    <div class="brush-dot active" style="width:14px;height:14px" data-sz="10" onclick="setAnnBrush(this)"></div>
+    <div class="brush-dot" style="width:20px;height:20px" data-sz="18" onclick="setAnnBrush(this)"></div>
+    <div class="brush-dot" style="width:28px;height:28px" data-sz="28" onclick="setAnnBrush(this)"></div>
+  </div>
+  <div class="ann-cw">
+    <canvas id="ann-canvas"></canvas>
+    <div id="ann-loading" class="ann-loading">
+      <div class="spinner"></div><div class="loading-txt">AI 辨識中...</div>
+    </div>
+  </div>
+  <div class="ann-tools">
+    <button class="tool-btn" onclick="annUndo()">↩ 復原</button>
+    <button class="tool-btn" id="erase-btn" onclick="annToggleErase()">橡皮擦</button>
+    <button class="tool-btn" onclick="annClear()">清除</button>
+  </div>
+  <div class="ann-actions">
+    <button class="ann-cancel" onclick="closeAnnotate()">取消</button>
+    <button class="ann-ok" onclick="submitAnnotation()">⚡ AI 辨識品名</button>
+  </div>
+</div>
+
+<!-- ════ Z SOURCE PICKER ════ -->
+<div id="zpicker-modal" style="position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)closeZPicker()">
+  <div style="background:var(--white);border-radius:20px 20px 0 0;width:100%;max-width:520px;overflow:hidden;">
+    <!-- Top: action buttons -->
+    <div style="padding:20px 16px 16px;">
+      <div style="font-size:16px;font-weight:800;margin-bottom:4px;">中標照片</div>
+      <div style="font-size:13px;color:var(--sub);margin-bottom:16px;">選擇照片來源</div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="closeZPicker();openCamera('z')" style="flex:1;padding:14px 8px;border-radius:var(--radius-sm);border:none;background:var(--red);color:white;font-size:14px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <span style="font-size:22px;">📷</span><span>拍攝</span>
+        </button>
+        <button onclick="closeZPicker();pickFile('z')" style="flex:1;padding:14px 8px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <span style="font-size:22px;">📁</span><span>選取檔案</span>
+        </button>
+      </div>
+    </div>
+    <!-- Divider + reuse list (only shown if available) -->
+    <div id="zpicker-reuse-section" style="display:none;">
+      <div style="padding:0 16px 8px;display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--sub);">或選擇已拍過的照片</div>
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+      <div style="max-height:240px;overflow-y:auto;padding:0 16px;" id="zpicker-reuse-list"></div>
+    </div>
+    <div style="padding:14px 16px 36px;">
+      <button onclick="closeZPicker()" style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:none;font-size:14px;font-weight:600;cursor:pointer;color:var(--sub);">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ RENDER MODAL ════ -->
+<div id="render-modal">
+  <div class="render-hdr">
+    <div class="render-title">✨ AI 重新渲染商品照</div>
+    <div class="render-hint">使用 OpenAI GPT-Image 重新生成專業白底商品圖</div>
+  </div>
+  <div class="render-body">
+    <!-- Before / After preview -->
+    <div class="render-preview-row">
+      <div class="render-img-box">
+        <img id="render-before-img" src="" alt="原圖"/>
+        <div class="render-img-lbl">原圖</div>
+      </div>
+      <div class="render-img-box" id="render-after-box">
+        <div style="text-align:center;color:rgba(255,255,255,.3);font-size:13px;font-weight:600;padding:20px;">
+          <div style="font-size:28px;margin-bottom:8px;">✨</div>AI 渲染結果<br/>顯示於此
+        </div>
+        <div class="render-img-lbl">AI 渲染</div>
+      </div>
+    </div>
+    <!-- Style options -->
+    <div class="render-section">
+      <div class="render-section-title">渲染風格</div>
+      <label class="render-option">
+        <input type="radio" name="render-style" value="standard" checked/>
+        <div><div class="render-option-label">標準白底商品圖</div><div class="render-option-sub">純白背景、商品置中、柔和打光、移除陰影</div></div>
+      </label>
+      <label class="render-option">
+        <input type="radio" name="render-style" value="metal"/>
+        <div><div class="render-option-label">金屬質感增強</div><div class="render-option-sub">突顯拋光/拉絲金屬紋理、柔光箱反光、底座接觸陰影</div></div>
+      </label>
+      <label class="render-option">
+        <input type="radio" name="render-style" value="custom"/>
+        <div><div class="render-option-label">自訂提示詞</div><div class="render-option-sub">手動描述需求</div></div>
+      </label>
+    </div>
+    <!-- Custom prompt (shown when custom selected) -->
+    <div class="render-section" id="render-custom-section" style="display:none;">
+      <div class="render-section-title">自訂提示詞</div>
+      <textarea class="render-prompt-box" id="render-custom-prompt" placeholder="例：純白背景，商品置中，柔和攝影棚打光，移除所有陰影..."></textarea>
+    </div>
+    <!-- Log -->
+    <div class="render-log" id="render-log">等待執行...</div>
+  </div>
+  <div class="render-actions">
+    <button class="render-cancel-btn" onclick="closeRenderModal()">取消</button>
+    <button class="render-go-btn" id="render-go-btn" onclick="runRender()">✨ 開始渲染</button>
+    <button class="render-save-btn" id="render-save-btn" onclick="saveRenderResult()">✅ 套用結果</button>
+  </div>
+</div>
+
+<!-- ════ SHADOW MODAL ════ -->
+<div id="shadow-modal">
+  <div class="shadow-hdr">
+    <div class="shadow-title">🌫 陰影變淡</div>
+    <div class="shadow-hint">AI 自動辨識陰影區域・滑桿調整淡化程度・即時預覽</div>
+  </div>
+  <div class="shadow-preview">
+    <canvas id="shadow-canvas"></canvas>
+    <div class="shadow-loading" id="shadow-loading">
+      <div class="spinner"></div>
+      <div class="loading-txt">AI 分析陰影中...</div>
+    </div>
+  </div>
+  <div class="shadow-controls">
+    <div class="shadow-ctrl-row">
+      <span class="shadow-lbl">淡化強度</span>
+      <input class="shadow-slider" type="range" id="sl-shadow" min="0" max="100" value="70" oninput="shadowPreview()"/>
+      <span class="shadow-val" id="sv-shadow">70</span>
+    </div>
+    <div class="shadow-ctrl-row">
+      <span class="shadow-lbl">偵測靈敏度</span>
+      <input class="shadow-slider" type="range" id="sl-sens" min="10" max="80" value="35" oninput="shadowPreview()"/>
+      <span class="shadow-val" id="sv-sens">35</span>
+    </div>
+  </div>
+  <div class="shadow-actions">
+    <button class="shadow-cancel-btn" onclick="closeShadowModal()">取消</button>
+    <button class="shadow-reset-btn" onclick="shadowReset()">重設</button>
+    <button class="shadow-ok-btn" onclick="confirmShadow()">套用 ✓</button>
+  </div>
+</div>
+
+<!-- ════ ERASE MODAL ════ -->
+<div id="erase-modal">
+  <div class="erase-hdr">
+    <div class="erase-title">✂️ 調整去背範圍</div>
+    <div class="erase-hint">顯示原始照片・用手指塗抹要去除的背景區域<br/>紅色遮罩 = 變為純白底・橡皮擦可取消標記</div>
+  </div>
+  <div class="erase-canvas-wrap">
+    <canvas id="erase-canvas"></canvas>
+  </div>
+  <div class="erase-toolbar">
+    <div class="erase-brush-row">
+      <span class="erase-brush-lbl">筆刷</span>
+      <div class="eb-dot active" style="width:16px;height:16px" data-sz="14" onclick="setEraseBrush(this)"></div>
+      <div class="eb-dot" style="width:22px;height:22px" data-sz="26" onclick="setEraseBrush(this)"></div>
+      <div class="eb-dot" style="width:30px;height:30px" data-sz="44" onclick="setEraseBrush(this)"></div>
+    </div>
+    <button class="erase-tool-btn" id="erase-eraser-btn" onclick="toggleEraseEraser()">橡皮擦</button>
+    <button class="erase-tool-btn" onclick="eraseUndo()">↩ 復原</button>
+    <button class="erase-tool-btn" onclick="eraseClear()">清除全部</button>
+  </div>
+  <div class="erase-actions">
+    <button class="erase-cancel-btn" onclick="closeEraseModal()">取消</button>
+    <button class="erase-ok-btn" onclick="confirmErase()">套用去背 ✓</button>
+  </div>
+</div>
+
+<!-- ════ DRIVE MODAL ════ -->
+<div id="drive-modal" onclick="if(event.target===this)closeDriveModal()">
+  <div class="drive-sheet">
+    <div class="drive-title">☁ Google Drive 同步</div>
+    <div class="drive-sub">連線後選擇資料夾，每 20 秒自動上傳 Excel 清單及所有照片。</div>
+    <div id="drive-nc">
+      <div style="background:var(--surface);border-radius:var(--radius-sm);padding:13px;font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:14px;">
+        ⚠️ 請輸入 <b style="color:var(--text)">Google OAuth Client ID</b>，或改用 <b style="color:var(--orange)">下載 ZIP</b>。<br/>
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--blue);font-weight:700;">→ 取得 Client ID</a>
+      </div>
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:6px;">Google OAuth Client ID</div>
+        <input id="drive-cid" type="text" placeholder="貼上 ...apps.googleusercontent.com" style="width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);outline:none;color:var(--text);"/>
+      </div>
+      <button class="btn btn-green btn-full" onclick="initDrive()">🔐 連線 Google Drive</button>
+    </div>
+    <div id="drive-conn" style="display:none">
+      <div class="drive-folder-row">
+        <div style="font-size:24px;">📁</div>
+        <div class="drive-folder-name" id="drive-fn">未選擇資料夾</div>
+        <div class="drive-folder-change" onclick="pickDriveFolder()">更換</div>
+      </div>
+      <div class="drive-info">同步狀態：<span id="drive-st-txt">—</span><br/>上次：<span id="drive-last">—</span>・下次：<b id="drive-next">—</b></div>
+      <div class="drive-btns">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeDriveModal()">關閉</button>
+        <button class="btn btn-green" style="flex:2" onclick="syncNow()">立即同步</button>
+        <button class="btn btn-ghost" style="flex:1;color:var(--red)" onclick="disconnectDrive()">中斷</button>
+      </div>
+    </div>
+    <button style="margin-top:14px;width:100%;padding:12px;border-radius:var(--radius-sm);border:none;background:none;font-size:14px;font-weight:600;color:var(--sub);cursor:pointer;" onclick="closeDriveModal()">取消</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+let allProducts=[], selectedCols=[], excelHeaders=[], excelRows=[], excelFileName='商品清單';
+let currentIdx=null, camMode=null, camStream=null, capturedRaw=null, activeFilter='all';
+// Crop state
+let cropImg=null, cropAngle=0, cropOffX=0, cropOffY=0, cropScale=1;
+let cropTouchStart=null, cropPinchDist=null;
+// Adjust state (封面照)
+let adjSourceData=null; // pre-adjust 1000×1000 data url
+// Annotation
+let annCtx=null, annColor='#FF3B2F', annSize=10, annErasing=false, annDrawing=false, annLastPos=null, annStrokes=[];
+// Drive
+let driveToken=null, driveFolderId=null, driveFolderName='', driveClientId='', driveTimer=null, driveSyncing=false, driveLastSync=null;
+
+const OUT_SIZE=1000;
+
+// ════════════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════════════
+function safeName(n){return n.replace(/[\/\\:*?"<>|]/g,'_').substring(0,80);}
+function zFn(p,i=0){return safeName(p.name)+'_中標_'+(i+1)+'.jpg';}
+function fFn(p){return safeName(p.name)+'_封面照.jpg';}
+function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2800);}
+function showProg(title,pct,txt){document.getElementById('prog-title').textContent=title;document.getElementById('prog-bar').style.width=pct+'%';document.getElementById('prog-txt').textContent=txt;document.getElementById('prog-overlay').classList.add('open');}
+function setProg(pct,txt){document.getElementById('prog-bar').style.width=pct+'%';document.getElementById('prog-txt').textContent=txt;}
+function hideProg(){document.getElementById('prog-overlay').classList.remove('open');}
+
+// Render a dataUrl into a 1000×1000 canvas (letterbox / cover)
+function renderTo1000(dataUrl, cover=false){
+  return new Promise(resolve=>{
+    const img=new Image(); img.onload=()=>{
+      const c=document.createElement('canvas'); c.width=OUT_SIZE; c.height=OUT_SIZE;
+      const ctx=c.getContext('2d');
+      ctx.fillStyle='white'; ctx.fillRect(0,0,OUT_SIZE,OUT_SIZE);
+      const s=cover ? Math.max(OUT_SIZE/img.width,OUT_SIZE/img.height) : Math.min(OUT_SIZE/img.width,OUT_SIZE/img.height);
+      const w=img.width*s, h=img.height*s;
+      ctx.drawImage(img,(OUT_SIZE-w)/2,(OUT_SIZE-h)/2,w,h);
+      resolve(c.toDataURL('image/jpeg',0.92));
+    }; img.src=dataUrl;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// SCREENS
+// ════════════════════════════════════════════════════════════
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen-'+id).classList.add('active');}
+function goImport(){showScreen('import');}
+function goList(){showScreen('list');renderList();}
+function goShoot(idx){
+  currentIdx=idx; const p=allProducts[idx];
+  document.getElementById('shoot-name').textContent=p.name;
+  document.getElementById('shoot-idx').textContent=`第 ${idx+1} 項 / 共 ${allProducts.length} 項`;
+  document.getElementById('z-fn').textContent='📄 '+zFn(p);
+  document.getElementById('f-fn').textContent='📄 '+fFn(p);
+  document.getElementById('z-name-inp').value=p.zName||'';
+  // Remove handlers first to prevent stale bindings
+  const zb=document.getElementById('z-box'), fb=document.getElementById('f-box');
+  zb.onclick=null; fb.onclick=null;
+  refreshZUI(); refreshFUI();
+  showScreen('shoot');
+  // Delay binding to prevent touch-through from list tap
+  setTimeout(()=>{
+    zb.onclick=()=>openZPicker();
+    fb.onclick=()=>openFPicker();
+  }, 350);
+}
+
+// ════════════════════════════════════════════════════════════
+// IMPORT
+// ════════════════════════════════════════════════════════════
+document.getElementById('file-inp').addEventListener('change',e=>handleFile(e.target.files[0]));
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');handleFile(e.dataTransfer.files[0]);});
+function handleFile(file){
+  if(!file)return; excelFileName=file.name.replace(/\.[^.]+$/,'');
+  const r=new FileReader(); r.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(!data.length){showToast('檔案無資料');return;}
+      excelHeaders=data[0].map(h=>String(h).trim());
+      excelRows=data.slice(1).filter(r=>r.some(c=>c!==''));
+      selectedCols=[];
+      document.getElementById('col-list').innerHTML=excelHeaders.map((h,i)=>`<div class="col-chip" onclick="toggleCol(${i})">${h||'欄'+i}</div>`).join('');
+      updateColPreview();
+      dz.innerHTML=`<div class="drop-icon">✅</div><div class="drop-label">${file.name}</div><div class="drop-hint">${excelRows.length} 筆資料・${excelHeaders.length} 欄位</div>`;
+      document.getElementById('col-picker').style.display='block';
+    }catch(e){showToast('檔案讀取失敗');}
+  }; r.readAsBinaryString(file);
+}
+function toggleCol(i){const x=selectedCols.indexOf(i);if(x>=0)selectedCols.splice(x,1);else selectedCols.push(i);
+  document.querySelectorAll('.col-chip').forEach((el,j)=>el.classList.toggle('selected',selectedCols.includes(j)));updateColPreview();}
+function updateColPreview(){
+  const btn=document.getElementById('import-btn');
+  if(!selectedCols.length){document.getElementById('col-preview').innerHTML='請選擇欄位';btn.disabled=true;return;}
+  const ex=excelRows.length?selectedCols.map(i=>String(excelRows[0][i]||'')).join('_'):'—';
+  document.getElementById('col-preview').innerHTML=`欄位：<span>${selectedCols.map(i=>excelHeaders[i]).join(' + ')}</span><br/>範例品名：<span>${ex}</span>`;
+  btn.disabled=false;
+}
+function doImport(){
+  allProducts=excelRows.map((row,i)=>{
+    const name=selectedCols.map(ci=>String(row[ci]||'').trim()).join('_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    return{id:i,name:name||`品項${i+1}`,zPhotos:[],zPhoto:null,fPhoto:null,zName:'',done_z:false,done_f:false};
+  }).filter(p=>p.name);
+  document.getElementById('list-title').textContent='商品清單';
+  document.getElementById('list-sub').textContent=`共 ${allProducts.length} 項`;
+  activeFilter='all'; setFilter('all'); goList();
+  showToast(`✅ 已匯入 ${allProducts.length} 項商品`);
+}
+
+// ════════════════════════════════════════════════════════════
+// LIST
+// ════════════════════════════════════════════════════════════
+function setFilter(f){
+  activeFilter=f;
+  [['fc-all','all'],['fc-zd','z-done'],['fc-zn','z-no'],['fc-fd','f-done'],['fc-fn','f-no']].forEach(([id,k])=>{
+    const el=document.getElementById(id); el.className='fc';
+    if(k===f)el.classList.add(k==='all'?'act-a':k.includes('done')?'act-g':'act-o');
+    else if(k.includes('done'))el.classList.add('on-g');
+    else if(k.includes('no'))el.classList.add('on-o');
+  });
+  renderList();
+}
+function renderList(){
+  const q=document.getElementById('search-inp').value.trim().toLowerCase();
+  let vis=allProducts.map((p,i)=>({p,i}));
+  if(q)vis=vis.filter(({p})=>p.name.toLowerCase().includes(q));
+  if(activeFilter==='z-done')vis=vis.filter(({p})=>p.done_z);
+  if(activeFilter==='z-no')vis=vis.filter(({p})=>!p.done_z);
+  if(activeFilter==='f-done')vis=vis.filter(({p})=>p.done_f);
+  if(activeFilter==='f-no')vis=vis.filter(({p})=>!p.done_f);
+  document.getElementById('list-count').textContent=`顯示 ${vis.length} / ${allProducts.length} 項`;
+  document.getElementById('prod-list').innerHTML=vis.map(({p,i})=>`
+    <div class="prod-row" onclick="goShoot(${i})">
+      <div class="prod-num">${i+1}</div>
+      <div class="prod-name"><div class="prod-name-text">${p.name}</div></div>
+      <div class="prod-badges">
+        <div class="badge ${p.done_z?'b-z':'b-e'}">中</div>
+        <div class="badge ${p.done_f?'b-f':'b-e'}">封</div>
+      </div>
+      <div class="prod-arrow">›</div>
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// SHOOT UI REFRESH
+// ════════════════════════════════════════════════════════════
+function refreshZUI(){
+  const p=allProducts[currentIdx];
+  if(!p.zPhotos) p.zPhotos=[];
+  const box=document.getElementById('z-box'),st=document.getElementById('z-st');
+  if(p.zPhotos.length>0){
+    // Show grid of photos + add button
+    const grid=p.zPhotos.map((img,i)=>`
+      <div style="position:relative;flex:0 0 calc(50% - 4px);">
+        <img src="${img}" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;display:block;"/>
+        <div style="position:absolute;top:4px;left:6px;background:rgba(0,0,0,.55);color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;">_${i+1}</div>
+        <button onclick="removeZPhoto(${i})" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.6);color:white;border:none;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">×</button>
+      </div>`).join('');
+    const addBtn=`
+      <div style="flex:0 0 calc(50% - 4px);">
+        <button onclick="openZPicker()" style="width:100%;aspect-ratio:1/1;border:2px dashed var(--border);border-radius:8px;background:var(--surface);color:var(--sub);font-size:13px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;">
+          <span style="font-size:24px;">＋</span><span>增加照片</span>
+        </button>
+      </div>`;
+    box.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px;width:100%;">${grid}${addBtn}</div>`;
+    box.classList.add('done'); box.style.cursor='default';
+    st.textContent=`✅ ${p.zPhotos.length} 張`; st.className='scard-st st-done';
+    document.getElementById('z-ann-row').style.display='block';
+    document.getElementById('z-name-row').style.display='block';
+  }else{
+    box.innerHTML=`<div class="ph-placeholder"><div class="ph-icon">🏷️</div><div class="ph-txt">點擊新增中標照片</div><div class="ph-hint">拍攝 · 選取檔案 · 複用已有</div></div>`;
+    box.classList.remove('done'); box.style.cursor='pointer';
+    st.textContent='未完成'; st.className='scard-st st-pend';
+    document.getElementById('z-ann-row').style.display='none';
+    document.getElementById('z-name-row').style.display='none';
+  }
+}
+function removeZPhoto(i){
+  const p=allProducts[currentIdx];
+  p.zPhotos.splice(i,1);
+  p.zPhoto=p.zPhotos[0]||null;
+  p.done_z=p.zPhotos.length>0;
+  refreshZUI();
+}
+function refreshFUI(){
+  const p=allProducts[currentIdx];
+  const box=document.getElementById('f-box'),st=document.getElementById('f-st');
+  if(p.fPhoto){
+    box.innerHTML=`<img src="${p.fPhoto}" style="width:100%;height:100%;object-fit:contain;background:white;"/><div class="photo-retake">更換</div>`;
+    box.classList.add('done');
+    st.textContent='✅ 完成';st.className='scard-st st-done';
+    document.getElementById('f-edit-bar').style.display='flex';
+  }else{
+    box.innerHTML=`<div class="ph-placeholder"><div class="ph-icon">📦</div><div class="ph-txt">點擊新增白底封面照</div><div class="ph-hint">拍攝 · 選取檔案 · 自動去背白底</div></div>`;
+    box.classList.remove('done');
+    st.textContent='未完成';st.className='scard-st st-pend';
+    document.getElementById('f-edit-bar').style.display='none';
+  }
+}
+function openFPicker(){document.getElementById('fpicker-modal').style.display='flex';}
+function closeFPicker(){document.getElementById('fpicker-modal').style.display='none';}
+
+// ════════════════════════════════════════════════════════════
+// CAMERA
+// ════════════════════════════════════════════════════════════
+function openCamera(mode){
+  camMode=mode; capturedRaw=null;
+  document.getElementById('cam-modal').classList.add('open');
+  document.getElementById('cam-hint').textContent=mode==='z'?'📋 對準商品標示':'📦 對準商品（方形框內為封面範圍）';
+  document.getElementById('cam-video').style.display='block';
+  document.getElementById('cam-prev-img').style.display='none';
+  document.getElementById('cam-shoot-bar').style.display='flex';
+  document.getElementById('cam-confirm-bar').style.display='none';
+  // Show square guide for 封面照
+  const guide=document.getElementById('cam-square-guide');
+  if(mode==='f'){
+    guide.style.display='block';
+    // Draw after video starts
+    setTimeout(drawCamGuide,300);
+    window._camGuideInterval=setInterval(drawCamGuide,500);
+  }else{
+    guide.style.display='none';
+    clearInterval(window._camGuideInterval);
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}}})
+    .then(s=>{camStream=s;document.getElementById('cam-video').srcObject=s;})
+    .catch(()=>{closeCam();pickFile(mode);});
+}
+function drawCamGuide(){
+  const gc=document.getElementById('cam-guide-canvas');
+  const v=document.getElementById('cam-video');
+  const W=v.offsetWidth||window.innerWidth;
+  const H=v.offsetHeight||(window.innerHeight-120);
+  if(gc.width!==W||gc.height!==H){gc.width=W;gc.height=H;}
+  const ctx=gc.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  // Square size = full width
+  const sz=Math.min(W,H)*0.95;
+  const x=(W-sz)/2, y=(H-sz)/2;
+  // Dark overlay outside square
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.fillRect(0,0,W,y);           // top
+  ctx.fillRect(0,y+sz,W,H-y-sz);  // bottom
+  ctx.fillRect(0,y,x,sz);          // left
+  ctx.fillRect(x+sz,y,W-x-sz,sz); // right
+  // White border
+  ctx.strokeStyle='white';ctx.lineWidth=2;ctx.setLineDash([]);
+  ctx.strokeRect(x,y,sz,sz);
+  // Corner handles
+  const hl=22;
+  [[x,y,1,1],[x+sz,y,-1,1],[x,y+sz,1,-1],[x+sz,y+sz,-1,-1]].forEach(([cx,cy,dx,dy])=>{
+    ctx.beginPath();ctx.lineWidth=4;
+    ctx.moveTo(cx,cy+dy*hl);ctx.lineTo(cx,cy);ctx.lineTo(cx+dx*hl,cy);ctx.stroke();
+  });
+}
+function closeCam(){
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+  clearInterval(window._camGuideInterval);
+  document.getElementById('cam-square-guide').style.display='none';
+  document.getElementById('cam-modal').classList.remove('open');
+}
+function shootPhoto(){
+  const v=document.getElementById('cam-video'),sc=document.getElementById('scratch');
+  sc.width=v.videoWidth||1280;sc.height=v.videoHeight||720;
+  sc.getContext('2d').drawImage(v,0,0);
+  capturedRaw=sc.toDataURL('image/jpeg',.95);
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+
+  if(camMode==='f'){
+    // 封面照：直接從視訊畫面裁切正方形（與 drawCamGuide 一致的正方形區域）
+    const W=v.videoWidth||1280, H=v.videoHeight||720;
+    const sz=Math.min(W,H); // 正方形邊長
+    const ox=(W-sz)/2, oy=(H-sz)/2;
+    const out=document.createElement('canvas'); out.width=sz; out.height=sz;
+    out.getContext('2d').drawImage(sc, ox,oy,sz,sz, 0,0,sz,sz);
+    capturedRaw=out.toDataURL('image/jpeg',.95);
+    closeCam();
+    processF(capturedRaw);
+  }else{
+    // 中標照：進確認畫面（可重拍），確認後壓縮
+    document.getElementById('cam-prev-img').src=capturedRaw;
+    document.getElementById('cam-prev-img').style.display='block';
+    document.getElementById('cam-video').style.display='none';
+    document.getElementById('cam-shoot-bar').style.display='none';
+    document.getElementById('cam-confirm-bar').style.display='flex';
+  }
+}
+function retakePhoto(){
+  document.getElementById('cam-prev-img').style.display='none';
+  document.getElementById('cam-video').style.display='block';
+  document.getElementById('cam-shoot-bar').style.display='flex';
+  document.getElementById('cam-confirm-bar').style.display='none';
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+    .then(s=>{camStream=s;document.getElementById('cam-video').srcObject=s;})
+    .catch(()=>closeCam());
+}
+
+// ════════════════════════════════════════════════════════════
+// PICK FILE
+// ════════════════════════════════════════════════════════════
+function pickFile(mode){
+  camMode=mode;
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();r.onload=ev=>{
+      capturedRaw=ev.target.result;
+      if(mode==='f'){
+        // 相簿選片 → 進裁切畫面（方框可移動縮放）
+        goToCrop();
+      } else {
+        // 中標 → 直接壓縮
+        closeCam();
+        processZ(capturedRaw);
+      }
+    };r.readAsDataURL(f);
+  };inp.click();
+}
+
+// 相機拍 z-mode 後按確認
+async function confirmCamPhoto(){
+  closeCam();
+  if(camMode==='z'){
+    processZ(capturedRaw);
+  } else {
+    // f-mode camera → already handled in shootPhoto, should not reach here
+    processF(capturedRaw);
+  }
+}
+
+// 中標照片壓縮 → ≤500KB JPG，保持原始比例
+async function processZ(dataUrl){
+  showToast('⏳ 壓縮中...');
+  const compressed = await compressToLimit(dataUrl, 500*1024);
+  const p=allProducts[currentIdx];
+  if(!p.zPhotos) p.zPhotos=[];
+  p.zPhotos.push(compressed);
+  p.zPhoto=p.zPhotos[0];
+  p.done_z=true;
+  refreshZUI();
+  if(p.zPhotos.length===1) autoParseLabel(compressed);
+  showToast('✅ 中標照片已加入');
+}
+
+// 壓縮圖到目標 bytes 以內，保持原始比例
+function compressToLimit(dataUrl, maxBytes){
+  return new Promise(resolve=>{
+    const img=new Image(); img.onload=()=>{
+      let q=0.88;
+      const tryQ=(quality)=>{
+        const c=document.createElement('canvas');
+        c.width=img.width; c.height=img.height;
+        c.getContext('2d').drawImage(img,0,0);
+        const out=c.toDataURL('image/jpeg', quality);
+        const bytes=(out.length-22)*3/4; // approx base64 size
+        if(bytes<=maxBytes||quality<=0.3){
+          resolve(out); return;
+        }
+        tryQ(Math.max(0.3, quality-0.1));
+      };
+      tryQ(q);
+    }; img.src=dataUrl;
+  });
+}
+
+// 封面照處理（已裁切為正方形 dataUrl）
+async function processF(dataUrl){
+  const key=getRemoveBgKey();
+  showToast(key?'🤖 AI 去背處理中...':'⏳ 本地去背處理中...');
+  const processed=await applyWhiteBg(dataUrl);
+  adjSourceData=processed;
+  const p=allProducts[currentIdx];
+  p.fPhotoOrig=dataUrl;  // 保存原始裁切圖（去背前）
+  p.fPhoto=processed; p.done_f=true;
+  refreshFUI(); updateRbgStatus();
+  showToast('✅ 封面照完成（1000×1000）');
+}
+
+// ════════════════════════════════════════════════════════════
+// CROP MODAL — moveable crop box over fixed image
+// ════════════════════════════════════════════════════════════
+let cropBoxX=0, cropBoxY=0, cropBoxSz=0; // crop box position in canvas coords
+let cropDragMode=null; // 'box' | null
+let cropBoxDragStart=null;
+
+function goToCrop(){
+  closeCam();
+  const isF = camMode==='f';
+  document.getElementById('crop-title-txt').textContent=isF?'選擇封面範圍（1:1）':'裁切中標照片';
+  document.getElementById('crop-hint-txt').textContent=isF?'拖曳方框移動・雙指縮放方框大小':'拖曳方框選取範圍・拖曳框外移動圖片';
+  cropAngle=0; cropDragMode=null; cropBoxDragStart=null; cropPinchDist=null;
+  document.getElementById('crop-modal').classList.add('open');
+  const wrap=document.getElementById('crop-wrap');
+  const cc=document.getElementById('crop-canvas');
+  cc.width=wrap.clientWidth; cc.height=wrap.clientHeight;
+
+  cropImg=new Image(); cropImg.onload=()=>{
+    if(isF){
+      // 封面照：圖片 fit 進畫布（不裁切），方框初始為最大正方形
+      cropScale=Math.min(cc.width/cropImg.width, cc.height/cropImg.height);
+      cropOffX=(cc.width-cropImg.width*cropScale)/2;
+      cropOffY=(cc.height-cropImg.height*cropScale)/2;
+      cropBoxSz=Math.round(Math.min(cc.width,cc.height)*0.9);
+      cropBoxX=Math.round((cc.width-cropBoxSz)/2);
+      cropBoxY=Math.round((cc.height-cropBoxSz)/2);
+    } else {
+      // 中標照：圖片填滿（cover），方框初始為 85%
+      cropScale=Math.max(cc.width/cropImg.width, cc.height/cropImg.height);
+      cropOffX=(cc.width-cropImg.width*cropScale)/2;
+      cropOffY=(cc.height-cropImg.height*cropScale)/2;
+      cropBoxSz=Math.round(Math.min(cc.width,cc.height)*0.85);
+      cropBoxX=Math.round((cc.width-cropBoxSz)/2);
+      cropBoxY=Math.round((cc.height-cropBoxSz)/2);
+    }
+    cropRender();
+  }; cropImg.src=capturedRaw;
+
+  // Mode-specific UI
+  document.getElementById('crop-rotate-btn').style.display=isF?'none':'';
+  document.getElementById('crop-zoom-in').textContent=isF?'＋ 放大框':'＋ 放大圖';
+  document.getElementById('crop-zoom-out').textContent=isF?'－ 縮小框':'－ 縮小圖';
+
+  function getPos(e){const r=cc.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+  function getTPos(t){const r=cc.getBoundingClientRect();return{x:t.clientX-r.left,y:t.clientY-r.top};}
+  function inBox(p){return p.x>=cropBoxX&&p.x<=cropBoxX+cropBoxSz&&p.y>=cropBoxY&&p.y<=cropBoxY+cropBoxSz;}
+
+  cc.ontouchstart=e=>{
+    e.preventDefault();
+    if(e.touches.length===2){
+      // Pinch = resize box (f-mode) or scale image (z-mode)
+      cropPinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      cropDragMode='pinch';
+    } else {
+      const p=getTPos(e.touches[0]);
+      cropDragMode=isF?'box':(inBox(p)?'box':'img');
+      cropBoxDragStart={x:p.x-cropBoxX,y:p.y-cropBoxY};
+      cropDragStart={x:p.x-cropOffX,y:p.y-cropOffY};
+    }
+  };
+  cc.ontouchmove=e=>{
+    e.preventDefault();
+    if(cropDragMode==='pinch'&&e.touches.length===2){
+      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      const f=d/cropPinchDist; cropPinchDist=d;
+      if(isF){
+        // Resize box, keep centered
+        const cx=cropBoxX+cropBoxSz/2, cy=cropBoxY+cropBoxSz/2;
+        cropBoxSz=Math.max(60,Math.min(Math.min(cc.width,cc.height),cropBoxSz*f));
+        cropBoxX=Math.max(0,Math.min(cc.width-cropBoxSz, cx-cropBoxSz/2));
+        cropBoxY=Math.max(0,Math.min(cc.height-cropBoxSz, cy-cropBoxSz/2));
+      } else {
+        const minSc=Math.max(cc.width/cropImg.width,cc.height/cropImg.height);
+        cropScale=Math.max(minSc,Math.min(8,cropScale*f));
+        clampImg();
+      }
+    } else if(e.touches.length===1){
+      const p=getTPos(e.touches[0]);
+      if(cropDragMode==='box'||isF){
+        cropBoxX=Math.max(0,Math.min(cc.width-cropBoxSz,p.x-cropBoxDragStart.x));
+        cropBoxY=Math.max(0,Math.min(cc.height-cropBoxSz,p.y-cropBoxDragStart.y));
+      } else {
+        cropOffX=p.x-cropDragStart.x; cropOffY=p.y-cropDragStart.y; clampImg();
+      }
+    }
+    cropRender();
+  };
+  cc.ontouchend=e=>{e.preventDefault();if(e.touches.length<2)cropPinchDist=null;cropDragMode=null;};
+
+  cc.onmousedown=e=>{
+    const p=getPos(e);
+    cropDragMode=isF?'box':(inBox(p)?'box':'img');
+    cropBoxDragStart={x:p.x-cropBoxX,y:p.y-cropBoxY};
+    cropDragStart={x:p.x-cropOffX,y:p.y-cropOffY};
+  };
+  cc.onmousemove=e=>{
+    if(!cropDragMode)return;
+    const p=getPos(e);
+    if(cropDragMode==='box'||isF){
+      cropBoxX=Math.max(0,Math.min(cc.width-cropBoxSz,p.x-cropBoxDragStart.x));
+      cropBoxY=Math.max(0,Math.min(cc.height-cropBoxSz,p.y-cropBoxDragStart.y));
+    } else {
+      cropOffX=p.x-cropDragStart.x; cropOffY=p.y-cropDragStart.y; clampImg();
+    }
+    cropRender();
+  };
+  cc.onmouseup=()=>{cropDragMode=null;};
+  cc.onmouseleave=()=>{cropDragMode=null;};
+  cc.onwheel=e=>{
+    e.preventDefault();
+    if(isF){
+      // Scroll = resize box
+      const cx=cropBoxX+cropBoxSz/2,cy=cropBoxY+cropBoxSz/2;
+      cropBoxSz=Math.max(60,Math.min(Math.min(cc.width,cc.height),cropBoxSz*(e.deltaY<0?1.08:.93)));
+      cropBoxX=Math.max(0,Math.min(cc.width-cropBoxSz,cx-cropBoxSz/2));
+      cropBoxY=Math.max(0,Math.min(cc.height-cropBoxSz,cy-cropBoxSz/2));
+    } else {
+      const minSc=Math.max(cc.width/cropImg.width,cc.height/cropImg.height);
+      cropScale=Math.max(minSc,Math.min(8,cropScale*(e.deltaY<0?1.08:.93)));
+      clampImg();
+    }
+    cropRender();
+  };
+}
+
+function clampImg(){
+  // Ensure image always covers the canvas
+  if(!cropImg)return;
+  const cc=document.getElementById('crop-canvas');
+  const iw=cropImg.width*cropScale, ih=cropImg.height*cropScale;
+  if(cropOffX>0)cropOffX=0;
+  if(cropOffY>0)cropOffY=0;
+  if(cropOffX+iw<cc.width)cropOffX=cc.width-iw;
+  if(cropOffY+ih<cc.height)cropOffY=cc.height-ih;
+}
+
+function cropRender(){
+  if(!cropImg)return;
+  const cc=document.getElementById('crop-canvas'),ctx=cc.getContext('2d');
+  const W=cc.width,H=cc.height;
+  ctx.clearRect(0,0,W,H);
+  // Draw image
+  ctx.save();
+  if(cropAngle!==0){
+    ctx.translate(W/2,H/2);ctx.rotate(cropAngle*Math.PI/180);ctx.translate(-W/2,-H/2);
+  }
+  ctx.drawImage(cropImg,cropOffX,cropOffY,cropImg.width*cropScale,cropImg.height*cropScale);
+  ctx.restore();
+  // Dark overlay outside crop box
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.fillRect(0,0,W,cropBoxY);                              // top
+  ctx.fillRect(0,cropBoxY+cropBoxSz,W,H-cropBoxY-cropBoxSz); // bottom
+  ctx.fillRect(0,cropBoxY,cropBoxX,cropBoxSz);               // left
+  ctx.fillRect(cropBoxX+cropBoxSz,cropBoxY,W-cropBoxX-cropBoxSz,cropBoxSz); // right
+  // Crop box border
+  ctx.strokeStyle='white';ctx.lineWidth=2;ctx.setLineDash([]);
+  ctx.strokeRect(cropBoxX,cropBoxY,cropBoxSz,cropBoxSz);
+  // Corner handles
+  const hl=20;
+  [[cropBoxX,cropBoxY,1,1],[cropBoxX+cropBoxSz,cropBoxY,-1,1],[cropBoxX,cropBoxY+cropBoxSz,1,-1],[cropBoxX+cropBoxSz,cropBoxY+cropBoxSz,-1,-1]].forEach(([x,y,dx,dy])=>{
+    ctx.beginPath();ctx.lineWidth=3;
+    ctx.moveTo(x,y+dy*hl);ctx.lineTo(x,y);ctx.lineTo(x+dx*hl,y);ctx.stroke();
+  });
+  // Rule of thirds grid inside box
+  ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;
+  for(let i=1;i<3;i++){
+    ctx.beginPath();ctx.moveTo(cropBoxX+cropBoxSz*i/3,cropBoxY);ctx.lineTo(cropBoxX+cropBoxSz*i/3,cropBoxY+cropBoxSz);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cropBoxX,cropBoxY+cropBoxSz*i/3);ctx.lineTo(cropBoxX+cropBoxSz,cropBoxY+cropBoxSz*i/3);ctx.stroke();
+  }
+}
+
+function cropZoom(f){
+  if(!cropImg)return;
+  const cc=document.getElementById('crop-canvas');
+  if(camMode==='f'){
+    const cx=cropBoxX+cropBoxSz/2,cy=cropBoxY+cropBoxSz/2;
+    cropBoxSz=Math.max(60,Math.min(Math.min(cc.width,cc.height),cropBoxSz*f));
+    cropBoxX=Math.max(0,Math.min(cc.width-cropBoxSz,cx-cropBoxSz/2));
+    cropBoxY=Math.max(0,Math.min(cc.height-cropBoxSz,cy-cropBoxSz/2));
+  } else {
+    const minSc=Math.max(cc.width/cropImg.width,cc.height/cropImg.height);
+    cropScale=Math.max(minSc,Math.min(8,cropScale*f));
+    clampImg();
+  }
+  cropRender();
+}
+function cropRotate(deg){cropAngle=(cropAngle+deg+360)%360;cropRender();}
+function cropReset(){
+  if(!cropImg)return;
+  const cc=document.getElementById('crop-canvas');
+  cropAngle=0;
+  if(camMode==='f'){
+    cropScale=Math.min(cc.width/cropImg.width,cc.height/cropImg.height);
+    cropOffX=(cc.width-cropImg.width*cropScale)/2;
+    cropOffY=(cc.height-cropImg.height*cropScale)/2;
+  } else {
+    cropScale=Math.max(cc.width/cropImg.width,cc.height/cropImg.height);
+    cropOffX=(cc.width-cropImg.width*cropScale)/2;
+    cropOffY=(cc.height-cropImg.height*cropScale)/2;
+  }
+  cropBoxSz=Math.round(Math.min(cc.width,cc.height)*(camMode==='f'?0.9:0.85));
+  cropBoxX=Math.round((cc.width-cropBoxSz)/2);
+  cropBoxY=Math.round((cc.height-cropBoxSz)/2);
+  clampImg(); cropRender();
+}
+function closeCrop(){document.getElementById('crop-modal').classList.remove('open');}
+
+async function confirmCrop(){
+  const cc=document.getElementById('crop-canvas');
+  // Map crop box back to source image coords
+  const srcX=(cropBoxX-cropOffX)/cropScale;
+  const srcY=(cropBoxY-cropOffY)/cropScale;
+  const srcSz=cropBoxSz/cropScale;
+  closeCrop();
+
+  if(camMode==='z'){
+    // 中標：保持原始尺寸，壓縮到 ≤500KB
+    const out=document.createElement('canvas');
+    out.width=Math.round(srcSz); out.height=Math.round(srcSz);
+    const octx=out.getContext('2d');
+    if(cropAngle!==0){octx.translate(out.width/2,out.height/2);octx.rotate(cropAngle*Math.PI/180);octx.translate(-out.width/2,-out.height/2);}
+    octx.drawImage(cropImg, srcX, srcY, srcSz, srcSz, 0, 0, out.width, out.height);
+    const raw=out.toDataURL('image/jpeg',.95);
+    processZ(raw);
+  } else {
+    // 封面照：輸出 1000×1000
+    const out=document.createElement('canvas'); out.width=OUT_SIZE; out.height=OUT_SIZE;
+    const octx=out.getContext('2d');
+    octx.fillStyle='white'; octx.fillRect(0,0,OUT_SIZE,OUT_SIZE);
+    if(cropAngle!==0){octx.translate(OUT_SIZE/2,OUT_SIZE/2);octx.rotate(cropAngle*Math.PI/180);octx.translate(-OUT_SIZE/2,-OUT_SIZE/2);}
+    octx.drawImage(cropImg, srcX, srcY, srcSz, srcSz, 0, 0, OUT_SIZE, OUT_SIZE);
+    const croppedData=out.toDataURL('image/jpeg',.95);
+    processF(croppedData);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Z SOURCE PICKER
+// ════════════════════════════════════════════════════════════
+function openZPicker(){
+  const opts=allProducts.filter((q,i)=>i!==currentIdx&&q.zPhotos&&q.zPhotos.length>0);
+  const sec=document.getElementById('zpicker-reuse-section');
+  if(opts.length){
+    sec.style.display='block';
+    document.getElementById('zpicker-reuse-list').innerHTML=opts.map(q=>`
+      <div onclick="reusePhoto(${allProducts.indexOf(q)})" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+        <img src="${q.zPhotos[0]}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;"/>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${q.name}</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px;">${q.zPhotos.length} 張中標照</div>
+        </div>
+        <div style="font-size:18px;color:#ccc;">›</div>
+      </div>`).join('');
+  }else{
+    sec.style.display='none';
+  }
+  document.getElementById('zpicker-modal').style.display='flex';
+}
+function closeZPicker(){document.getElementById('zpicker-modal').style.display='none';}
+function reusePhoto(fromIdx){
+  closeZPicker();
+  const src=allProducts[fromIdx], p=allProducts[currentIdx];
+  if(!p.zPhotos) p.zPhotos=[];
+  // Copy all photos from source
+  p.zPhotos=[...src.zPhotos];
+  p.zPhoto=p.zPhotos[0]||null;
+  p.done_z=p.zPhotos.length>0;
+  p.zName=src.zName||'';
+  document.getElementById('z-name-inp').value=p.zName;
+  refreshZUI();showToast('♻ 已複用：'+src.name);
+}
+
+// ════════════════════════════════════════════════════════════
+// WHITE BG — AI去背（remove.bg）+ 邊緣平滑
+// ════════════════════════════════════════════════════════════
+
+// 取得 remove.bg API key（從 UI 輸入，存 localStorage）
+function getRemoveBgKey(){
+  return localStorage.getItem('removebg_key')||'';
+}
+
+async function applyWhiteBg(dataUrl){
+  const key=getRemoveBgKey();
+  if(key){
+    try{
+      return await removeBgApi(dataUrl, key);
+    }catch(e){
+      console.warn('remove.bg 失敗，改用本地去背:', e.message);
+      showToast('⚠️ AI去背失敗，改用本地模式');
+    }
+  }
+  return localRemoveBg(dataUrl);
+}
+
+// ── remove.bg API ──────────────────────────────────────────
+async function removeBgApi(dataUrl, apiKey){
+  // Convert dataUrl to blob
+  const blob=dataUrlToBlob(dataUrl);
+  const form=new FormData();
+  form.append('image_file', blob, 'photo.jpg');
+  form.append('size','regular'); // up to 625×400 free; 'full' for HD
+  const res=await fetch('https://api.remove.bg/v1.0/removebg',{
+    method:'POST',
+    headers:{'X-Api-Key': apiKey},
+    body: form
+  });
+  if(!res.ok){
+    const msg=await res.text();
+    throw new Error(res.status===402?'額度用完':res.status===403?'Key無效':msg);
+  }
+  // Response is PNG with transparency
+  const pngBlob=await res.blob();
+  const pngUrl=URL.createObjectURL(pngBlob);
+  const result=await compositeOnWhite(pngUrl);
+  URL.revokeObjectURL(pngUrl);
+  return result;
+}
+
+function dataUrlToBlob(dataUrl){
+  const [header, b64]=dataUrl.split(',');
+  const mime=header.match(/:(.*?);/)[1];
+  const bin=atob(b64);
+  const u8=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+  return new Blob([u8],{type:mime});
+}
+
+// Composite transparent PNG onto white 1000×1000, with edge feathering
+async function compositeOnWhite(imgUrl){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.crossOrigin='anonymous';
+    img.onload=()=>{
+      // Draw at OUT_SIZE
+      const c=document.createElement('canvas');c.width=OUT_SIZE;c.height=OUT_SIZE;
+      const ctx=c.getContext('2d');
+      // White bg
+      ctx.fillStyle='white';ctx.fillRect(0,0,OUT_SIZE,OUT_SIZE);
+      // Scale image to fit (letterbox)
+      const sc=Math.min(OUT_SIZE/img.width,OUT_SIZE/img.height);
+      const w=img.width*sc,h=img.height*sc;
+      const ox=(OUT_SIZE-w)/2,oy=(OUT_SIZE-h)/2;
+      ctx.drawImage(img,ox,oy,w,h);
+      // Feather alpha edges to remove fringing/jaggies
+      const id=ctx.getImageData(0,0,OUT_SIZE,OUT_SIZE);
+      smoothAlphaEdges(id.data,OUT_SIZE,OUT_SIZE);
+      ctx.putImageData(id,0,0);
+      // Final composite: replace semi-transparent pixels with white blend
+      const id2=ctx.getImageData(0,0,OUT_SIZE,OUT_SIZE);
+      blendOnWhite(id2.data);
+      ctx.putImageData(id2,0,0);
+      resolve(c.toDataURL('image/jpeg',.94));
+    };
+    img.onerror=()=>resolve(imgUrl);
+    img.src=imgUrl;
+  });
+}
+
+// Gaussian-like blur on alpha channel only → smooth jagged edges
+function smoothAlphaEdges(data, W, H){
+  const alpha=new Float32Array(W*H);
+  for(let i=0;i<W*H;i++) alpha[i]=data[i*4+3]/255;
+  // 3-pass box blur on alpha (approximates Gaussian)
+  const tmp=new Float32Array(W*H);
+  const R=1; // radius
+  for(let pass=0;pass<3;pass++){
+    // Horizontal
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        let s=0,c=0;
+        for(let dx=-R;dx<=R;dx++){
+          const nx=x+dx;
+          if(nx>=0&&nx<W){s+=alpha[y*W+nx];c++;}
+        }
+        tmp[y*W+x]=s/c;
+      }
+    }
+    // Vertical
+    for(let x=0;x<W;x++){
+      for(let y=0;y<H;y++){
+        let s=0,c=0;
+        for(let dy=-R;dy<=R;dy++){
+          const ny=y+dy;
+          if(ny>=0&&ny<H){s+=tmp[ny*W+x];c++;}
+        }
+        alpha[y*W+x]=s/c;
+      }
+    }
+  }
+  for(let i=0;i<W*H;i++) data[i*4+3]=Math.round(alpha[i]*255);
+}
+
+// Blend remaining semi-transparent pixels onto white
+function blendOnWhite(data){
+  for(let i=0;i<data.length;i+=4){
+    const a=data[i+3]/255;
+    if(a<1){
+      data[i]  =Math.round(data[i]*a+255*(1-a));
+      data[i+1]=Math.round(data[i+1]*a+255*(1-a));
+      data[i+2]=Math.round(data[i+2]*a+255*(1-a));
+      data[i+3]=255;
+    }
+  }
+}
+
+// ── 本地去背（FloodFill 從四角，只去純背景）──────────────
+async function localRemoveBg(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image();img.onload=()=>{
+      const c=document.createElement('canvas');c.width=OUT_SIZE;c.height=OUT_SIZE;
+      const ctx=c.getContext('2d');
+      ctx.fillStyle='white';ctx.fillRect(0,0,OUT_SIZE,OUT_SIZE);
+      ctx.drawImage(img,0,0,OUT_SIZE,OUT_SIZE);
+      const id=ctx.getImageData(0,0,OUT_SIZE,OUT_SIZE);
+      const d=id.data;
+
+      // White-balance correction first
+      let rs=0,gs=0,bs=0,n=0;
+      const sp=(x,y)=>{const i=(y*OUT_SIZE+x)*4;rs+=d[i];gs+=d[i+1];bs+=d[i+2];n++;};
+      for(let k=0;k<40;k++){sp(k,k);sp(OUT_SIZE-1-k,k);sp(k,OUT_SIZE-1-k);sp(OUT_SIZE-1-k,OUT_SIZE-1-k);}
+      const gr=(rs+gs+bs)/(3*n);
+      const rsc=Math.min(1.5,gr/(rs/n)||1),gsc=Math.min(1.5,gr/(gs/n)||1),bsc=Math.min(1.5,gr/(bs/n)||1);
+      for(let i=0;i<d.length;i+=4){
+        d[i]=Math.min(255,d[i]*rsc);d[i+1]=Math.min(255,d[i+1]*gsc);d[i+2]=Math.min(255,d[i+2]*bsc);
+      }
+
+      // FloodFill bg mask from all 4 corners + edges
+      // Tolerance: pixel is "bg" if close to white/gray-ish
+      const bgMask=new Uint8Array(OUT_SIZE*OUT_SIZE); // 1=bg
+      const tol=45;
+      const isBg=(i)=>{
+        const r=d[i],g=d[i+1],b=d[i+2];
+        return r>255-tol&&g>255-tol&&b>255-tol&&Math.abs(r-g)<tol&&Math.abs(g-b)<tol;
+      };
+      const queue=[];
+      const visit=(x,y)=>{
+        const idx=y*OUT_SIZE+x;
+        if(x<0||x>=OUT_SIZE||y<0||y>=OUT_SIZE||bgMask[idx]) return;
+        if(isBg(idx*4)){bgMask[idx]=1;queue.push(x,y);}
+      };
+      // Seed from all border pixels
+      for(let x=0;x<OUT_SIZE;x++){visit(x,0);visit(x,OUT_SIZE-1);}
+      for(let y=0;y<OUT_SIZE;y++){visit(0,y);visit(OUT_SIZE-1,y);}
+      // BFS
+      while(queue.length){
+        const y=queue.pop(),x=queue.pop();
+        visit(x-1,y);visit(x+1,y);visit(x,y-1);visit(x,y+1);
+      }
+
+      // Apply: bg → white, keep product pixels
+      for(let i=0;i<OUT_SIZE*OUT_SIZE;i++){
+        if(bgMask[i]){d[i*4]=255;d[i*4+1]=255;d[i*4+2]=255;}
+      }
+
+      // Feather transition zone (1px around fg/bg boundary)
+      const feath=new Uint8Array(OUT_SIZE*OUT_SIZE);
+      for(let y=1;y<OUT_SIZE-1;y++){
+        for(let x=1;x<OUT_SIZE-1;x++){
+          const i=y*OUT_SIZE+x;
+          if(!bgMask[i]){
+            if(bgMask[i-1]||bgMask[i+1]||bgMask[i-OUT_SIZE]||bgMask[i+OUT_SIZE]) feath[i]=1;
+          }
+        }
+      }
+      for(let i=0;i<OUT_SIZE*OUT_SIZE;i++){
+        if(feath[i]){
+          // Blend 50% toward white for anti-alias
+          d[i*4]=Math.round((d[i*4]+255)/2);
+          d[i*4+1]=Math.round((d[i*4+1]+255)/2);
+          d[i*4+2]=Math.round((d[i*4+2]+255)/2);
+        }
+      }
+
+      ctx.putImageData(id,0,0);
+      resolve(c.toDataURL('image/jpeg',.93));
+    };img.src=dataUrl;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ADJUST MODAL
+// ════════════════════════════════════════════════════════════
+function openAdjust(){
+  const p=allProducts[currentIdx];if(!p.fPhoto)return;
+  adjSourceData=p.fPhoto;
+  ['exp','con','wb','sat'].forEach(k=>{document.getElementById('sl-'+k).value=0;document.getElementById('sv-'+k).textContent='0';});
+  document.getElementById('adjust-modal').classList.add('open');
+  adjRenderPreview();
+}
+function closeAdjust(){document.getElementById('adjust-modal').classList.remove('open');}
+function adjReset(){['exp','con','wb','sat'].forEach(k=>{document.getElementById('sl-'+k).value=0;document.getElementById('sv-'+k).textContent='0';});adjRenderPreview();}
+
+let adjRenderTimer=null;
+function adjPreview(){
+  ['exp','con','wb','sat'].forEach(k=>document.getElementById('sv-'+k).textContent=document.getElementById('sl-'+k).value);
+  clearTimeout(adjRenderTimer);adjRenderTimer=setTimeout(adjRenderPreview,60);
+}
+function adjRenderPreview(){
+  const exp=parseInt(document.getElementById('sl-exp').value);
+  const con=parseInt(document.getElementById('sl-con').value);
+  const wb=parseInt(document.getElementById('sl-wb').value);
+  const sat=parseInt(document.getElementById('sl-sat').value);
+  const img=new Image();img.onload=()=>{
+    const ac=document.getElementById('adj-canvas');
+    const wrap=ac.parentElement;
+    const sz=Math.min(wrap.clientWidth,wrap.clientHeight,OUT_SIZE);
+    ac.width=sz;ac.height=sz;
+    const ctx=ac.getContext('2d');
+    ctx.fillStyle='white';ctx.fillRect(0,0,sz,sz);ctx.drawImage(img,0,0,sz,sz);
+    const d=ctx.getImageData(0,0,sz,sz);
+    applyAdj(d.data,exp,con,wb,sat);
+    ctx.putImageData(d,0,0);
+  };img.src=adjSourceData;
+}
+function applyAdj(data,exp,con,wb,sat){
+  const expF=exp/100*80;       // brightness offset
+  const conF=1+(con/100);      // contrast multiplier
+  const wbR=1+(wb/200);        // warm = +R -B
+  const wbB=1-(wb/200);
+  const satF=1+(sat/100);
+  for(let i=0;i<data.length;i+=4){
+    let r=data[i],g=data[i+1],b=data[i+2];
+    // exposure
+    r+=expF;g+=expF;b+=expF;
+    // white balance
+    r*=wbR;b*=wbB;
+    // contrast (around midpoint 128)
+    r=(r-128)*conF+128;g=(g-128)*conF+128;b=(b-128)*conF+128;
+    // saturation
+    const avg=(r+g+b)/3;
+    r=avg+(r-avg)*satF;g=avg+(g-avg)*satF;b=avg+(b-avg)*satF;
+    data[i]=Math.max(0,Math.min(255,r));
+    data[i+1]=Math.max(0,Math.min(255,g));
+    data[i+2]=Math.max(0,Math.min(255,b));
+  }
+}
+function confirmAdjust(){
+  const exp=parseInt(document.getElementById('sl-exp').value);
+  const con=parseInt(document.getElementById('sl-con').value);
+  const wb=parseInt(document.getElementById('sl-wb').value);
+  const sat=parseInt(document.getElementById('sl-sat').value);
+  // Render at OUT_SIZE
+  const out=document.createElement('canvas');out.width=OUT_SIZE;out.height=OUT_SIZE;
+  const ctx=out.getContext('2d');
+  const img=new Image();img.onload=()=>{
+    ctx.fillStyle='white';ctx.fillRect(0,0,OUT_SIZE,OUT_SIZE);ctx.drawImage(img,0,0,OUT_SIZE,OUT_SIZE);
+    const d=ctx.getImageData(0,0,OUT_SIZE,OUT_SIZE);
+    applyAdj(d.data,exp,con,wb,sat);
+    ctx.putImageData(d,0,0);
+    const p=allProducts[currentIdx];
+    p.fPhoto=out.toDataURL('image/jpeg',.92);
+    adjSourceData=p.fPhoto;
+    refreshFUI();closeAdjust();showToast('✅ 調整已套用');
+  };img.src=adjSourceData;
+}
+
+// ════════════════════════════════════════════════════════════
+// AI PARSE
+// ════════════════════════════════════════════════════════════
+async function autoParseLabel(imageData){
+  const inp=document.getElementById('z-name-inp');inp.value='';inp.placeholder='AI 讀取中...';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:500,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:imageData.split(',')[1]}},
+          {type:'text',text:'分析商品標示圖片，找出品名，純 JSON 回覆：{"product_name":"品名"}，找不到填 null。'}
+        ]}]
+      })
+    });
+    const d=await res.json();
+    const txt=(d.content||[]).map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
+    const pars=JSON.parse(txt);
+    if(pars.product_name){inp.value=pars.product_name;inp.placeholder='';showToast('⚡ AI 讀取品名');}
+    else inp.placeholder='請手動輸入或圈選辨識';
+  }catch(e){inp.placeholder='請手動輸入或圈選辨識';}
+}
+
+// ════════════════════════════════════════════════════════════
+// SAVE
+// ════════════════════════════════════════════════════════════
+function saveProduct(){
+  const p=allProducts[currentIdx];
+  p.zName=document.getElementById('z-name-inp').value.trim();
+  p.done_z=!!p.zPhoto;p.done_f=!!p.fPhoto;
+  showToast('✅ 已儲存：'+p.name);
+  const next=findNext();
+  if(next!==null)setTimeout(()=>goShoot(next),300);
+  else setTimeout(()=>goList(),300);
+}
+function findNext(){for(let i=currentIdx+1;i<allProducts.length;i++)if(!allProducts[i].done_z||!allProducts[i].done_f)return i;return null;}
+
+// ════════════════════════════════════════════════════════════
+// ANNOTATE
+// ════════════════════════════════════════════════════════════
+function openAnnotate(){
+  const p=allProducts[currentIdx];if(!p.zPhoto)return;
+  annStrokes=[];annErasing=false;
+  document.getElementById('erase-btn').classList.remove('on');
+  document.getElementById('ann-modal').classList.add('open');
+  document.getElementById('ann-loading').classList.remove('open');
+  const ac=document.getElementById('ann-canvas'),wrap=ac.parentElement,img=new Image();
+  img.onload=()=>{
+    const sc=Math.min(wrap.clientWidth/img.width,wrap.clientHeight/img.height,1);
+    ac.width=Math.floor(img.width*sc);ac.height=Math.floor(img.height*sc);
+    annCtx=ac.getContext('2d');annCtx.drawImage(img,0,0,ac.width,ac.height);annSave();
+  };img.src=p.zPhoto;
+  ac.ontouchstart=e=>{e.preventDefault();annStart(gTP(ac,e.touches[0]));};
+  ac.ontouchmove=e=>{e.preventDefault();annDraw(gTP(ac,e.touches[0]));};
+  ac.ontouchend=e=>{e.preventDefault();annEnd();};
+  ac.onmousedown=e=>annStart(gMP(ac,e));
+  ac.onmousemove=e=>{if(annDrawing)annDraw(gMP(ac,e));};
+  ac.onmouseup=()=>annEnd();ac.onmouseleave=()=>annEnd();
+}
+function closeAnnotate(){document.getElementById('ann-modal').classList.remove('open');}
+function gTP(c,t){const r=c.getBoundingClientRect();return{x:(t.clientX-r.left)*(c.width/r.width),y:(t.clientY-r.top)*(c.height/r.height)};}
+function gMP(c,e){const r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*(c.width/r.width),y:(e.clientY-r.top)*(c.height/r.height)};}
+function annStart(p){annDrawing=true;annLastPos=p;annSave();}
+function annDraw(p){
+  if(!annDrawing||!annCtx)return;
+  annCtx.save();
+  if(annErasing){annCtx.globalCompositeOperation='destination-out';annCtx.strokeStyle='rgba(0,0,0,1)';}
+  else{annCtx.globalCompositeOperation='source-over';annCtx.strokeStyle=h2r(annColor,.55);}
+  annCtx.lineWidth=annSize;annCtx.lineCap='round';annCtx.lineJoin='round';
+  annCtx.beginPath();annCtx.moveTo(annLastPos.x,annLastPos.y);annCtx.lineTo(p.x,p.y);annCtx.stroke();
+  annCtx.restore();annLastPos=p;
+}
+function annEnd(){annDrawing=false;annLastPos=null;}
+function h2r(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${g},${b},${a})`;}
+function annSave(){if(!annCtx)return;const ac=document.getElementById('ann-canvas');annStrokes.push(annCtx.getImageData(0,0,ac.width,ac.height));if(annStrokes.length>40)annStrokes.shift();}
+function annUndo(){if(!annCtx||annStrokes.length<2)return;annStrokes.pop();const ac=document.getElementById('ann-canvas');annCtx.putImageData(annStrokes[annStrokes.length-1],0,0);}
+function annClear(){
+  if(!annCtx)return;const ac=document.getElementById('ann-canvas');
+  const img=new Image();img.onload=()=>{annCtx.clearRect(0,0,ac.width,ac.height);annCtx.drawImage(img,0,0,ac.width,ac.height);annStrokes=[];annSave();};
+  img.src=allProducts[currentIdx].zPhoto;
+}
+function setAnnColor(el){annColor=el.dataset.c;annErasing=false;document.getElementById('erase-btn').classList.remove('on');document.querySelectorAll('.csw').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
+function setAnnBrush(el){annSize=parseInt(el.dataset.sz);document.querySelectorAll('.brush-dot').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
+function annToggleErase(){annErasing=!annErasing;document.getElementById('erase-btn').classList.toggle('on',annErasing);if(annErasing)document.querySelectorAll('.csw').forEach(s=>s.classList.remove('active'));}
+async function submitAnnotation(){
+  const ac=document.getElementById('ann-canvas');if(!annCtx)return;
+  document.getElementById('ann-loading').classList.add('open');
+  const flat=document.createElement('canvas');flat.width=ac.width;flat.height=ac.height;
+  const fctx=flat.getContext('2d');fctx.fillStyle='white';fctx.fillRect(0,0,flat.width,flat.height);fctx.drawImage(ac,0,0);
+  const b64=flat.toDataURL('image/jpeg',.92).split(',')[1];
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:500,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:'商品標示照片，使用者塗色標記品名區域。辨識被彩色覆蓋的文字，純 JSON 回覆：{"product_name":"品名"}'}
+        ]}]
+      })
+    });
+    const d=await res.json();
+    const txt=(d.content||[]).map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
+    const pars=JSON.parse(txt);
+    document.getElementById('ann-loading').classList.remove('open');closeAnnotate();
+    if(pars.product_name){document.getElementById('z-name-inp').value=pars.product_name;showToast('✅ 圈選辨識：'+pars.product_name);}
+    else showToast('⚠️ 未能辨識');
+  }catch(e){document.getElementById('ann-loading').classList.remove('open');closeAnnotate();showToast('辨識失敗');}
+}
+
+// ════════════════════════════════════════════════════════════
+// ZIP
+// ════════════════════════════════════════════════════════════
+function buildExcelBlob(){
+  const rows=[['品名','中標檔案','封面照檔案','中標完成','封面完成','辨識品名']];
+  allProducts.forEach(p=>{
+    const zFiles=(p.zPhotos||[]).map((_,i)=>zFn(p,i)).join(', ')||'—';
+    rows.push([p.name,zFiles,fFn(p),p.done_z?'✅':'',p.done_f?'✅':'',p.zName||'']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows),wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'商品清單');return XLSX.write(wb,{bookType:'xlsx',type:'array'});
+}
+function du8(dataUrl){const b=atob(dataUrl.split(',')[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+async function downloadZip(){
+  const done=allProducts.filter(p=>(p.zPhotos&&p.zPhotos.length)||p.fPhoto);
+  if(!done.length){showToast('⚠️ 尚無照片可匯出');return;}
+  showProg('建立 ZIP',0,'準備中...');
+  const zip=new JSZip();let step=0;
+  const total=done.reduce((s,p)=>(p.zPhotos?p.zPhotos.length:0)+(p.fPhoto?1:0),0)+1;
+  const tick=()=>{step++;setProg(Math.round(step/total*100),`${step}/${total}...`);};
+  zip.file(excelFileName+'_清單.xlsx',buildExcelBlob());tick();
+  for(const p of done){
+    if(p.zPhotos) for(let i=0;i<p.zPhotos.length;i++){zip.file(zFn(p,i),du8(p.zPhotos[i]));tick();}
+    if(p.fPhoto){zip.file(fFn(p),du8(p.fPhoto));tick();}
+    await new Promise(r=>setTimeout(r,0));
+  }
+  setProg(98,'壓縮中...');
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=excelFileName+'_酷澎上架.zip';a.click();URL.revokeObjectURL(a.href);
+  hideProg();showToast(`✅ 已下載 ZIP（${done.length} 項）`);
+}
+
+// ════════════════════════════════════════════════════════════
+// DRIVE
+// ════════════════════════════════════════════════════════════
+function openDriveModal(){
+  document.getElementById('drive-modal').classList.add('open');
+  document.getElementById('drive-nc').style.display=driveToken?'none':'block';
+  document.getElementById('drive-conn').style.display=driveToken?'block':'none';
+  updateDriveUI();
+}
+function closeDriveModal(){document.getElementById('drive-modal').classList.remove('open');}
+function initDrive(){
+  driveClientId=document.getElementById('drive-cid').value.trim();
+  if(!driveClientId.includes('.apps.googleusercontent.com')){showToast('請輸入有效的 Client ID');return;}
+  const r=encodeURIComponent(location.origin+location.pathname);
+  const sc=encodeURIComponent('https://www.googleapis.com/auth/drive.file');
+  const url=`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(driveClientId)}&redirect_uri=${r}&response_type=token&scope=${sc}`;
+  const pop=window.open(url,'_blank','width=500,height=650');
+  const t=setInterval(()=>{try{const u=pop.location.href;if(u.includes('access_token=')){const p=new URLSearchParams(u.split('#')[1]);driveToken=p.get('access_token');pop.close();clearInterval(t);document.getElementById('drive-nc').style.display='none';document.getElementById('drive-conn').style.display='block';showToast('✅ Google Drive 連線成功');pickDriveFolder();}}catch(e){}},500);
+}
+async function pickDriveFolder(){
+  if(!driveToken)return;
+  try{
+    const res=await fetch("https://www.googleapis.com/drive/v3/files?q=mimeType%3D'application%2Fvnd.google-apps.folder'+and+trashed%3Dfalse&fields=files(id,name)&pageSize=20",{headers:{Authorization:'Bearer '+driveToken}});
+    const d=await res.json();if(d.error){driveToken=null;showToast('Drive 授權失效');return;}
+    const fs=d.files||[];let msg='選擇 Drive 資料夾：\n';fs.forEach((f,i)=>msg+=`${i+1}. ${f.name}\n`);msg+='0. 根目錄（我的雲端硬碟）';
+    const c=prompt(msg);if(c===null)return;
+    const ci=parseInt(c);
+    if(ci===0||isNaN(ci)){driveFolderId='root';driveFolderName='我的雲端硬碟';}
+    else if(ci>=1&&ci<=fs.length){driveFolderId=fs[ci-1].id;driveFolderName=fs[ci-1].name;}
+    else{showToast('輸入無效');return;}
+    document.getElementById('drive-fn').textContent=driveFolderName;
+    startDriveAuto();showToast('✅ 已選擇：'+driveFolderName);
+  }catch(e){showToast('無法取得資料夾清單');}
+}
+function startDriveAuto(){
+  if(driveTimer)clearInterval(driveTimer);driveTimer=setInterval(syncNow,20000);
+  document.getElementById('drive-dot').style.display='';
+  document.getElementById('drive-btn').classList.add('on');document.getElementById('drive-btn').textContent='☁ 已連線';
+}
+function disconnectDrive(){
+  if(driveTimer){clearInterval(driveTimer);driveTimer=null;}
+  driveToken=null;driveFolderId=null;driveFolderName='';
+  document.getElementById('drive-dot').style.display='none';
+  document.getElementById('drive-btn').classList.remove('on');document.getElementById('drive-btn').textContent='☁ Google Drive';
+  closeDriveModal();showToast('已中斷 Drive');
+}
+async function syncNow(){
+  if(!driveToken||!driveFolderId||driveSyncing)return;driveSyncing=true;updateDriveUI('sync');
+  try{
+    await driveUp(excelFileName+'_清單.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',new Blob([buildExcelBlob()]));
+    for(const p of allProducts){
+      if(p.zPhotos) for(let i=0;i<p.zPhotos.length;i++) await driveUp(zFn(p,i),'image/jpeg',new Blob([du8(p.zPhotos[i])],{type:'image/jpeg'}));
+      if(p.fPhoto)await driveUp(fFn(p),'image/jpeg',new Blob([du8(p.fPhoto)],{type:'image/jpeg'}));
+    }
+    driveLastSync=new Date();updateDriveUI('ok');showToast('☁ Drive 同步完成');
+  }catch(e){updateDriveUI('err');if(e.message==='auth'){driveToken=null;showToast('Drive 授權失效，請重新連線');}else showToast('同步失敗');}
+  driveSyncing=false;
+}
+async function driveUp(name,mime,blob){
+  const q=`name='${name}' and '${driveFolderId}' in parents and trashed=false`;
+  const lr=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{headers:{Authorization:'Bearer '+driveToken}});
+  if(lr.status===401)throw new Error('auth');
+  const ld=await lr.json();const ex=ld.files&&ld.files[0];
+  const fm=new FormData();
+  fm.append('metadata',new Blob([JSON.stringify(ex?{name}:{name,parents:[driveFolderId]})],{type:'application/json'}));
+  fm.append('file',blob);
+  const r=await fetch(ex?`https://www.googleapis.com/upload/drive/v3/files/${ex.id}?uploadType=multipart`:`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,{method:ex?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken},body:fm});
+  if(r.status===401)throw new Error('auth');
+}
+function updateDriveUI(s){
+  const el=document.getElementById('drive-st-txt');
+  if(s==='sync'){el.textContent='⏳ 同步中...';el.style.color='var(--orange)';}
+  else if(s==='ok'){el.textContent='✅ 完成';el.style.color='var(--green)';}
+  else if(s==='err'){el.textContent='❌ 失敗';el.style.color='var(--red)';}
+  if(driveLastSync)document.getElementById('drive-last').textContent=driveLastSync.toLocaleTimeString('zh-TW');
+  if(driveTimer)document.getElementById('drive-next').textContent=new Date(Date.now()+20000).toLocaleTimeString('zh-TW');
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER MODAL — OpenAI GPT-Image AI 重新渲染
+// ════════════════════════════════════════════════════════════
+let renderResultDataUrl=null;
+
+const RENDER_PROMPTS={
+  standard:`Professional Amazon product photo. Pure white background (RGB 255,255,255), no shadows, no textures, no seams. Product perfectly centered, filling 85-90% of frame. Soft even studio lighting from softbox. Crisp sharp edges. High resolution. No reflections on background.`,
+  metal:`Professional Amazon product photo of polished stainless steel item. Pure white background (RGB 255,255,255). Product centered, filling 85-90% of frame. Soft even studio softbox lighting that reveals both the mirror-polished inner surface and brushed outer finish. Clean metallic sheen with no harsh hotspots or overexposure. Only a very subtle, clean contact shadow directly under the base to prevent floating effect. No other shadows. Sharp, high-quality product photography.`
+};
+
+function getOaiKey(){return localStorage.getItem('oai_key')||'';}
+function saveOaiKey(){
+  const k=document.getElementById('oai-key-inp').value.trim();
+  if(!k){localStorage.removeItem('oai_key');updateOaiStatus();showToast('已清除 OpenAI Key');return;}
+  localStorage.setItem('oai_key',k);
+  document.getElementById('oai-key-inp').value='';
+  updateOaiStatus();showToast('✅ OpenAI Key 已儲存');
+}
+function updateOaiStatus(){
+  const el=document.getElementById('oai-status');if(!el)return;
+  const k=getOaiKey();
+  if(k){el.textContent='✅ 已設定';el.style.background='var(--purple-light)';el.style.color='var(--purple)';}
+  else{el.textContent='未設定';el.style.background='var(--surface)';el.style.color='var(--sub)';}
+}
+
+function openRenderModal(){
+  const p=allProducts[currentIdx];
+  const src=p.fPhotoOrig||p.fPhoto; if(!src)return;
+  renderResultDataUrl=null;
+  document.getElementById('render-modal').classList.add('open');
+  document.getElementById('render-before-img').src=src;
+  document.getElementById('render-after-box').innerHTML=`<div style="text-align:center;color:rgba(255,255,255,.3);font-size:13px;font-weight:600;padding:20px;"><div style="font-size:28px;margin-bottom:8px;">✨</div>AI 渲染結果<br/>顯示於此</div><div class="render-img-lbl">AI 渲染</div>`;
+  document.getElementById('render-go-btn').disabled=false;
+  document.getElementById('render-go-btn').style.display='flex';
+  document.getElementById('render-save-btn').style.display='none';
+  document.getElementById('render-log').textContent='等待執行...';
+  // Style radio change handler
+  document.querySelectorAll('input[name="render-style"]').forEach(r=>{
+    r.onchange=()=>{
+      document.getElementById('render-custom-section').style.display=r.value==='custom'?'block':'none';
+    };
+  });
+}
+function closeRenderModal(){document.getElementById('render-modal').classList.remove('open');}
+
+function renderLog(msg){
+  const el=document.getElementById('render-log');
+  el.textContent=el.textContent==='等待執行...'?msg:el.textContent+'\n'+msg;
+}
+
+async function runRender(){
+  const key=getOaiKey();
+  if(!key){showToast('請先設定 OpenAI API Key');return;}
+  const p=allProducts[currentIdx];
+  const src=p.fPhotoOrig||p.fPhoto; if(!src)return;
+
+  const style=document.querySelector('input[name="render-style"]:checked').value;
+  let prompt=style==='custom'
+    ?document.getElementById('render-custom-prompt').value.trim()||RENDER_PROMPTS.standard
+    :RENDER_PROMPTS[style]||RENDER_PROMPTS.standard;
+
+  const btn=document.getElementById('render-go-btn');
+  btn.disabled=true; btn.innerHTML='<div class="spin-sm"></div> 渲染中...';
+  document.getElementById('render-log').textContent='';
+  renderLog('📤 分析原圖並建立遮罩...');
+
+  try{
+    // Step 1: Use Claude to analyse the product and generate a refined prompt
+    renderLog('🤖 Claude 分析商品特徵...');
+    const b64=src.split(',')[1];
+    const claudeRes=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:'這是一張商品照片，請簡短描述商品的材質、顏色、形狀（最多30字），只回覆描述，不要其他文字。'}
+        ]}]
+      })
+    });
+    const cd=await claudeRes.json();
+    const productDesc=(cd.content||[]).map(b=>b.text||'').join('').trim();
+    renderLog(`📦 商品識別：${productDesc}`);
+
+    // Step 2: Build full prompt
+    const fullPrompt=`${prompt} The product is: ${productDesc}. Do not change the product itself, only improve the background, lighting and shadows.`;
+    renderLog('🎨 送出 AI 渲染請求...');
+
+    // Step 3: Convert image to PNG blob for OpenAI (requires PNG)
+    const pngBlob=await jpegToPngBlob(src);
+
+    // Step 4: Call OpenAI gpt-image-1 edit endpoint
+    const form=new FormData();
+    form.append('model','gpt-image-1');
+    form.append('image',pngBlob,'product.png');
+    form.append('prompt',fullPrompt);
+    form.append('n','1');
+    form.append('size','1024x1024');
+    form.append('quality','high');
+
+    const oaiRes=await fetch('https://api.openai.com/v1/images/edits',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+key},
+      body:form
+    });
+
+    if(!oaiRes.ok){
+      const err=await oaiRes.json();
+      throw new Error(err.error?.message||'OpenAI API 錯誤 '+oaiRes.status);
+    }
+
+    const oaiData=await oaiRes.json();
+    renderLog('✅ 渲染完成，載入結果...');
+
+    // Get result — gpt-image-1 returns b64_json
+    const imgData=oaiData.data?.[0];
+    if(!imgData)throw new Error('未收到圖片結果');
+
+    let resultUrl;
+    if(imgData.b64_json){
+      resultUrl='data:image/png;base64,'+imgData.b64_json;
+    } else if(imgData.url){
+      // Fetch the URL and convert to dataUrl
+      const imgRes=await fetch(imgData.url);
+      const blob=await imgRes.blob();
+      resultUrl=await blobToDataUrl(blob);
+    }
+
+    // Scale to 1000×1000 JPEG
+    renderResultDataUrl=await scaleToJpeg(resultUrl,OUT_SIZE);
+
+    // Show result
+    document.getElementById('render-after-box').innerHTML=`<img src="${renderResultDataUrl}" style="width:100%;height:100%;object-fit:contain;"/><div class="render-img-lbl">AI 渲染</div>`;
+    renderLog('🎉 可以左右對比，滿意後按「套用結果」');
+    document.getElementById('render-go-btn').style.display='none';
+    document.getElementById('render-save-btn').style.display='block';
+
+  }catch(e){
+    renderLog('❌ 錯誤：'+e.message);
+    btn.disabled=false;btn.innerHTML='✨ 開始渲染';
+    showToast('渲染失敗：'+e.message.substring(0,30));
+  }
+}
+
+async function jpegToPngBlob(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image(); img.onload=()=>{
+      const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
+      c.getContext('2d').drawImage(img,0,0);
+      c.toBlob(b=>resolve(b),'image/png');
+    };img.src=dataUrl;
+  });
+}
+function blobToDataUrl(blob){
+  return new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(blob);});
+}
+async function scaleToJpeg(src,sz){
+  return new Promise(r=>{
+    const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{
+      const c=document.createElement('canvas');c.width=sz;c.height=sz;
+      const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,sz,sz);
+      const s=Math.min(sz/img.width,sz/img.height);
+      ctx.drawImage(img,(sz-img.width*s)/2,(sz-img.height*s)/2,img.width*s,img.height*s);
+      r(c.toDataURL('image/jpeg',.94));
+    };img.src=src;
+  });
+}
+
+function saveRenderResult(){
+  if(!renderResultDataUrl)return;
+  const p=allProducts[currentIdx];
+  p.fPhoto=renderResultDataUrl; adjSourceData=renderResultDataUrl;
+  refreshFUI(); closeRenderModal();
+  showToast('✅ AI 渲染結果已套用');
+}
+
+// ════════════════════════════════════════════════════════════
+// SHADOW MODAL — AI 陰影辨識 + 淡化
+// ════════════════════════════════════════════════════════════
+let shadowOrigData=null;   // 原始 ImageData
+let shadowMaskF=null;       // Float32Array 0~1 每個 px 的陰影強度
+let shadowCtx=null;
+let shadowRenderTimer=null;
+
+function openShadowModal(){
+  const p=allProducts[currentIdx];
+  const src=p.fPhotoOrig||p.fPhoto; if(!src)return;
+  document.getElementById('shadow-modal').classList.add('open');
+  document.getElementById('sl-shadow').value=70; document.getElementById('sv-shadow').textContent='70';
+  document.getElementById('sl-sens').value=35;   document.getElementById('sv-sens').textContent='35';
+  shadowOrigData=null; shadowMaskF=null;
+
+  const sc=document.getElementById('shadow-canvas');
+  const wrap=sc.parentElement;
+  const img=new Image(); img.onload=async()=>{
+    const scale=Math.min(wrap.clientWidth/img.width, wrap.clientHeight/img.height, 1);
+    sc.width=Math.floor(img.width*scale); sc.height=Math.floor(img.height*scale);
+    shadowCtx=sc.getContext('2d');
+    shadowCtx.drawImage(img,0,0,sc.width,sc.height);
+    shadowOrigData=shadowCtx.getImageData(0,0,sc.width,sc.height);
+    // Analyse shadows with AI + local heuristic
+    await detectShadows(src, img);
+    shadowPreview();
+  }; img.src=src;
+}
+function closeShadowModal(){document.getElementById('shadow-modal').classList.remove('open');}
+function shadowReset(){
+  document.getElementById('sl-shadow').value=70; document.getElementById('sv-shadow').textContent='70';
+  document.getElementById('sl-sens').value=35;   document.getElementById('sv-sens').textContent='35';
+  shadowPreview();
+}
+
+// Detect shadow pixels using Claude AI + local heuristic fallback
+async function detectShadows(src, img){
+  const loading=document.getElementById('shadow-loading');
+  loading.classList.add('show');
+  const W=shadowOrigData.width, H=shadowOrigData.height;
+  shadowMaskF=new Float32Array(W*H);
+  // Local heuristic: build initial mask
+  buildLocalShadowMask(35);
+  // Try AI refinement via Claude
+  try{
+    const b64=src.split(',')[1]||btoa(src);
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64.substring(0,b64.length)}},
+          {type:'text',text:`這是一張電商商品照片。請分析圖片中的陰影區域（商品投射在白色背景上的陰影），以純 JSON 回覆（不要其他文字）：
+{"shadow_description":"陰影位置描述","shadow_regions":[{"label":"陰影名稱","position":"top/bottom/left/right/center","extent":"small/medium/large","darkness":"light/medium/dark"}],"bg_is_white":true/false,"product_has_reflection":true/false}`}
+        ]}]
+      })
+    });
+    const d=await res.json();
+    const txt=(d.content||[]).map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
+    const info=JSON.parse(txt);
+    // Refine mask based on AI positional hints
+    refineMaskWithAI(info, W, H);
+  }catch(e){
+    console.warn('AI shadow analysis failed, using local only');
+  }
+  loading.classList.remove('show');
+}
+
+// Local heuristic: shadow pixels are dark-ish, desaturated, near-grey, NOT the product core
+function buildLocalShadowMask(sens){
+  if(!shadowOrigData)return;
+  const d=shadowOrigData.data;
+  const W=shadowOrigData.width, H=shadowOrigData.height;
+  const tol=sens; // sensitivity: how grey/dark counts as shadow
+  shadowMaskF=new Float32Array(W*H);
+
+  // First pass: mark candidate shadow pixels
+  for(let i=0;i<W*H;i++){
+    const r=d[i*4],g=d[i*4+1],b=d[i*4+2];
+    const brightness=(r+g+b)/3;
+    const saturation=Math.max(r,g,b)-Math.min(r,g,b);
+    // Shadow: darker than white, low saturation (grey-ish), not pure white
+    const isShadow=brightness<(255-tol/2)&&brightness>(255-tol*4)&&saturation<tol*0.8;
+    shadowMaskF[i]=isShadow?Math.min(1,(255-brightness)/(tol*2)):0;
+  }
+
+  // Blur the mask for smooth edges (box blur)
+  const blurred=new Float32Array(W*H);
+  const R=Math.max(2,Math.round(W/80));
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      let s=0,c=0;
+      for(let dy=-R;dy<=R;dy++){
+        const ny=y+dy; if(ny<0||ny>=H)continue;
+        for(let dx=-R;dx<=R;dx++){
+          const nx=x+dx; if(nx<0||nx>=W)continue;
+          s+=shadowMaskF[ny*W+nx];c++;
+        }
+      }
+      blurred[y*W+x]=s/c;
+    }
+  }
+  shadowMaskF=blurred;
+}
+
+// Refine mask using AI positional hints
+function refineMaskWithAI(info, W, H){
+  if(!info.shadow_regions||!shadowMaskF)return;
+  for(const region of info.shadow_regions){
+    const darkness=region.darkness==='dark'?1.4:region.darkness==='medium'?1.1:0.9;
+    const pos=region.position||'';
+    // Boost mask strength in the AI-identified region
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        let inRegion=false;
+        if(pos.includes('bottom')&&y>H*0.6)inRegion=true;
+        if(pos.includes('top')&&y<H*0.4)inRegion=true;
+        if(pos.includes('left')&&x<W*0.4)inRegion=true;
+        if(pos.includes('right')&&x>W*0.6)inRegion=true;
+        if(pos==='center')inRegion=true;
+        if(inRegion) shadowMaskF[y*W+x]=Math.min(1,shadowMaskF[y*W+x]*darkness);
+      }
+    }
+  }
+}
+
+function shadowPreview(){
+  const sv=parseInt(document.getElementById('sl-shadow').value);
+  const ss=parseInt(document.getElementById('sl-sens').value);
+  document.getElementById('sv-shadow').textContent=sv;
+  document.getElementById('sv-sens').textContent=ss;
+  clearTimeout(shadowRenderTimer);
+  shadowRenderTimer=setTimeout(()=>renderShadowPreview(sv,ss),50);
+}
+
+function renderShadowPreview(strength, sens){
+  if(!shadowCtx||!shadowOrigData)return;
+  // Rebuild mask with current sensitivity
+  buildLocalShadowMask(sens);
+  // Apply: blend shadow pixels toward white based on strength
+  const W=shadowOrigData.width, H=shadowOrigData.height;
+  const outData=new ImageData(W,H);
+  const s=strength/100;
+  for(let i=0;i<W*H;i++){
+    const pi=i*4;
+    const m=shadowMaskF[i]*s; // how much to fade (0=keep, 1=white)
+    const r=shadowOrigData.data[pi];
+    const g=shadowOrigData.data[pi+1];
+    const b=shadowOrigData.data[pi+2];
+    outData.data[pi]  =Math.round(r+(255-r)*m);
+    outData.data[pi+1]=Math.round(g+(255-g)*m);
+    outData.data[pi+2]=Math.round(b+(255-b)*m);
+    outData.data[pi+3]=255;
+  }
+  shadowCtx.putImageData(outData,0,0);
+}
+
+async function confirmShadow(){
+  if(!shadowCtx||!shadowOrigData)return;
+  const sv=parseInt(document.getElementById('sl-shadow').value);
+  const ss=parseInt(document.getElementById('sl-sens').value);
+  buildLocalShadowMask(ss);
+
+  // Render at OUT_SIZE×OUT_SIZE
+  const sc=document.getElementById('shadow-canvas');
+  const outC=document.createElement('canvas'); outC.width=OUT_SIZE; outC.height=OUT_SIZE;
+  const octx=outC.getContext('2d');
+  const src=allProducts[currentIdx].fPhotoOrig||allProducts[currentIdx].fPhoto;
+  await new Promise(resolve=>{
+    const img=new Image(); img.onload=()=>{
+      octx.fillStyle='white'; octx.fillRect(0,0,OUT_SIZE,OUT_SIZE);
+      octx.drawImage(img,0,0,OUT_SIZE,OUT_SIZE);
+      // Apply shadow fade at full res
+      const fullOrig=octx.getImageData(0,0,OUT_SIZE,OUT_SIZE);
+      // Scale mask from display to OUT_SIZE
+      const W=sc.width, H=sc.height;
+      const outData=new ImageData(OUT_SIZE,OUT_SIZE);
+      const s=sv/100;
+      for(let y=0;y<OUT_SIZE;y++){
+        for(let x=0;x<OUT_SIZE;x++){
+          const mx=Math.min(W-1,Math.round(x*W/OUT_SIZE));
+          const my=Math.min(H-1,Math.round(y*H/OUT_SIZE));
+          const m=shadowMaskF[my*W+mx]*s;
+          const pi=(y*OUT_SIZE+x)*4;
+          outData.data[pi]  =Math.round(fullOrig.data[pi]+(255-fullOrig.data[pi])*m);
+          outData.data[pi+1]=Math.round(fullOrig.data[pi+1]+(255-fullOrig.data[pi+1])*m);
+          outData.data[pi+2]=Math.round(fullOrig.data[pi+2]+(255-fullOrig.data[pi+2])*m);
+          outData.data[pi+3]=255;
+        }
+      }
+      octx.putImageData(outData,0,0);
+      resolve();
+    }; img.src=src;
+  });
+  const result=outC.toDataURL('image/jpeg',.94);
+  const p=allProducts[currentIdx];
+  p.fPhoto=result; adjSourceData=result;
+  refreshFUI(); closeShadowModal();
+  showToast('✅ 陰影已淡化');
+}
+
+// ════════════════════════════════════════════════════════════
+// ERASE MODAL — 手動去背（在原始照片上塗膜）
+// ════════════════════════════════════════════════════════════
+let eraseCtx=null, eraseBrushSz=14, eraseIsErasing=false, eraseDrawing=false, eraseLastPos=null, eraseStrokes=[];
+let eraseOrigData=null;   // 原始圖 ImageData（不含塗膜）
+let eraseMaskData=null;   // 只存塗膜 alpha mask
+
+function openEraseModal(){
+  const p=allProducts[currentIdx];
+  // 一律用原始裁切圖（去背前），若沒有則用現有封面照
+  const src=p.fPhotoOrig||p.fPhoto;
+  if(!src)return;
+  eraseStrokes=[]; eraseIsErasing=false;
+  document.getElementById('erase-eraser-btn').classList.remove('on');
+  document.getElementById('erase-modal').classList.add('open');
+
+  const ec=document.getElementById('erase-canvas');
+  const wrap=ec.parentElement;
+  const img=new Image(); img.onload=()=>{
+    const sc=Math.min(wrap.clientWidth/img.width, wrap.clientHeight/img.height, 1);
+    ec.width=Math.floor(img.width*sc); ec.height=Math.floor(img.height*sc);
+    eraseCtx=ec.getContext('2d');
+    // Draw original clean image
+    eraseCtx.drawImage(img,0,0,ec.width,ec.height);
+    eraseOrigData=eraseCtx.getImageData(0,0,ec.width,ec.height);
+    // Init empty mask canvas (offscreen)
+    eraseMaskData=new Uint8Array(ec.width*ec.height); // 0=keep, 1=erase
+    eraseSave();
+  }; img.src=src;
+
+  const gP=e=>{const r=ec.getBoundingClientRect();return{x:(e.clientX-r.left)*(ec.width/r.width),y:(e.clientY-r.top)*(ec.height/r.height)};};
+  const gT=t=>{const r=ec.getBoundingClientRect();return{x:(t.clientX-r.left)*(ec.width/r.width),y:(t.clientY-r.top)*(ec.height/r.height)};};
+
+  ec.ontouchstart=e=>{e.preventDefault();eraseDown(gT(e.touches[0]));};
+  ec.ontouchmove=e=>{e.preventDefault();eraseMove(gT(e.touches[0]));};
+  ec.ontouchend=e=>{e.preventDefault();eraseUp();};
+  ec.onmousedown=e=>eraseDown(gP(e));
+  ec.onmousemove=e=>{if(eraseDrawing)eraseMove(gP(e));};
+  ec.onmouseup=eraseUp; ec.onmouseleave=eraseUp;
+}
+function closeEraseModal(){document.getElementById('erase-modal').classList.remove('open');}
+
+function eraseDown(p){eraseDrawing=true;eraseLastPos=p;eraseSave();erasePaintAt(p);}
+function eraseMove(p){if(!eraseDrawing)return;erasePaintAt(p);eraseLastPos=p;}
+function eraseUp(){eraseDrawing=false;eraseLastPos=null;}
+
+function erasePaintAt(p){
+  if(!eraseCtx||!eraseOrigData||!eraseMaskData)return;
+  const ec=document.getElementById('erase-canvas');
+  const W=ec.width, H=ec.height;
+  const r=eraseBrushSz;
+  const x0=Math.max(0,Math.round(p.x-r)), y0=Math.max(0,Math.round(p.y-r));
+  const x1=Math.min(W,Math.round(p.x+r)), y1=Math.min(H,Math.round(p.y+r));
+
+  // Update mask
+  for(let iy=y0;iy<y1;iy++){
+    for(let ix=x0;ix<x1;ix++){
+      if((ix-p.x)**2+(iy-p.y)**2<=r*r){
+        eraseMaskData[iy*W+ix]=eraseIsErasing?0:1;
+      }
+    }
+  }
+  // Redraw patch: original + red overlay where mask=1
+  const patch=eraseCtx.getImageData(x0,y0,x1-x0,y1-y0);
+  for(let iy=y0;iy<y1;iy++){
+    for(let ix=x0;ix<x1;ix++){
+      const pi=((iy-y0)*(x1-x0)+(ix-x0))*4;
+      const oi=(iy*W+ix)*4;
+      if(eraseMaskData[iy*W+ix]){
+        // Show red tint over original
+        patch.data[pi]=Math.min(255,eraseOrigData.data[oi]*0.45+220*0.55);
+        patch.data[pi+1]=Math.round(eraseOrigData.data[oi+1]*0.45+30*0.55);
+        patch.data[pi+2]=Math.round(eraseOrigData.data[oi+2]*0.45+30*0.55);
+        patch.data[pi+3]=255;
+      } else {
+        // Show original
+        patch.data[pi]=eraseOrigData.data[oi];
+        patch.data[pi+1]=eraseOrigData.data[oi+1];
+        patch.data[pi+2]=eraseOrigData.data[oi+2];
+        patch.data[pi+3]=eraseOrigData.data[oi+3];
+      }
+    }
+  }
+  eraseCtx.putImageData(patch,x0,y0);
+}
+
+function eraseSave(){
+  if(!eraseCtx)return;
+  const ec=document.getElementById('erase-canvas');
+  eraseStrokes.push({
+    img:eraseCtx.getImageData(0,0,ec.width,ec.height),
+    mask:eraseMaskData?new Uint8Array(eraseMaskData):new Uint8Array(0)
+  });
+  if(eraseStrokes.length>40)eraseStrokes.shift();
+}
+function eraseUndo(){
+  if(!eraseCtx||eraseStrokes.length<2)return;
+  eraseStrokes.pop();
+  const snap=eraseStrokes[eraseStrokes.length-1];
+  const ec=document.getElementById('erase-canvas');
+  eraseCtx.putImageData(snap.img,0,0);
+  eraseMaskData=new Uint8Array(snap.mask);
+}
+function eraseClear(){
+  if(!eraseCtx||!eraseOrigData)return;
+  const ec=document.getElementById('erase-canvas');
+  eraseCtx.putImageData(eraseOrigData,0,0);
+  eraseMaskData=new Uint8Array(ec.width*ec.height);
+  eraseStrokes=[]; eraseSave();
+}
+function setEraseBrush(el){
+  eraseBrushSz=parseInt(el.dataset.sz);
+  document.querySelectorAll('.eb-dot').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+}
+function toggleEraseEraser(){
+  eraseIsErasing=!eraseIsErasing;
+  document.getElementById('erase-eraser-btn').classList.toggle('on',eraseIsErasing);
+}
+
+async function confirmErase(){
+  if(!eraseCtx||!eraseOrigData||!eraseMaskData)return;
+  const ec=document.getElementById('erase-canvas');
+  const W=ec.width, H=ec.height;
+
+  // Build output: original pixels where mask=0, white where mask=1
+  const outData=new ImageData(W,H);
+  for(let i=0;i<W*H;i++){
+    const pi=i*4;
+    if(eraseMaskData[i]){
+      outData.data[pi]=255; outData.data[pi+1]=255; outData.data[pi+2]=255; outData.data[pi+3]=255;
+    } else {
+      outData.data[pi]=eraseOrigData.data[pi];
+      outData.data[pi+1]=eraseOrigData.data[pi+1];
+      outData.data[pi+2]=eraseOrigData.data[pi+2];
+      outData.data[pi+3]=eraseOrigData.data[pi+3];
+    }
+  }
+
+  // Feather boundary: pixels next to erased area blend toward white
+  const boundary=new Uint8Array(W*H);
+  for(let y=1;y<H-1;y++){
+    for(let x=1;x<W-1;x++){
+      const idx=y*W+x;
+      if(!eraseMaskData[idx]){
+        // fg pixel — check if any 8-neighbour is erased
+        const neighbours=[idx-1,idx+1,idx-W,idx+W,idx-W-1,idx-W+1,idx+W-1,idx+W+1];
+        if(neighbours.some(n=>n>=0&&n<W*H&&eraseMaskData[n]))boundary[idx]=1;
+      }
+    }
+  }
+  for(let i=0;i<W*H;i++){
+    if(boundary[i]){
+      const pi=i*4;
+      // 3-pass blend: 60% white, 40% original colour
+      outData.data[pi]=Math.round(outData.data[pi]*0.4+255*0.6);
+      outData.data[pi+1]=Math.round(outData.data[pi+1]*0.4+255*0.6);
+      outData.data[pi+2]=Math.round(outData.data[pi+2]*0.4+255*0.6);
+    }
+  }
+
+  // Render to OUT_SIZE×OUT_SIZE
+  eraseCtx.putImageData(outData,0,0);
+  const finalC=document.createElement('canvas'); finalC.width=OUT_SIZE; finalC.height=OUT_SIZE;
+  const fctx=finalC.getContext('2d');
+  fctx.fillStyle='white'; fctx.fillRect(0,0,OUT_SIZE,OUT_SIZE);
+  fctx.drawImage(ec,0,0,OUT_SIZE,OUT_SIZE);
+  const result=finalC.toDataURL('image/jpeg',.94);
+
+  const p=allProducts[currentIdx];
+  p.fPhoto=result; adjSourceData=result;
+  refreshFUI(); closeEraseModal();
+  showToast('✅ 去背已更新');
+}
+
+// ════════════════════════════════════════════════════════════
+// REMOVE.BG KEY MANAGEMENT
+// ════════════════════════════════════════════════════════════
+function saveRemoveBgKey(){
+  const k=document.getElementById('rbg-key-inp').value.trim();
+  if(!k){localStorage.removeItem('removebg_key');updateRbgStatus();showToast('已清除 API Key');return;}
+  localStorage.setItem('removebg_key',k);
+  document.getElementById('rbg-key-inp').value='';
+  updateRbgStatus();showToast('✅ remove.bg Key 已儲存，下次去背自動使用 AI');
+}
+function updateRbgStatus(){
+  const el=document.getElementById('rbg-status');if(!el)return;
+  const k=getRemoveBgKey();
+  if(k){el.textContent='✅ AI 去背已啟用';el.style.background='var(--green-light)';el.style.color='var(--green)';}
+  else{el.textContent='未設定（本地模式）';el.style.background='var(--surface)';el.style.color='var(--sub)';}
+}
+updateRbgStatus();
+updateOaiStatus();
+</script>
+</body>
+</html>
