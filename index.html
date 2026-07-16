@@ -1547,85 +1547,98 @@ function blendOnWhite(data){
 }
 
 // ── 本地專業商品照處理 ──────────────────────────────────────
-// 流程：白平衡校正 → FloodFill去背 → 商品置中85-90% → 邊緣平滑
-//       → 過強光點柔化 → 金屬質感增強 → 底座接觸陰影 → 純白底
 async function localRemoveBg(dataUrl){
   return new Promise(resolve=>{
     const img=new Image(); img.onload=()=>{
       const S=OUT_SIZE;
-      // Step 1: Draw original at OUT_SIZE
-      const src=document.createElement('canvas'); src.width=S; src.height=S;
-      const sctx=src.getContext('2d');
-      sctx.fillStyle='white'; sctx.fillRect(0,0,S,S);
-      sctx.drawImage(img,0,0,S,S);
-      let d=sctx.getImageData(0,0,S,S);
 
-      // Step 2: White balance correction (sample 4 corners)
-      d=whiteBalance(d,S);
+      // ① Draw source at native ratio, letterboxed into S×S
+      const ratio=img.width/img.height;
+      let sw=S, sh=S;
+      if(ratio>1){sh=Math.round(S/ratio);}else{sw=Math.round(S*ratio);}
+      const sox=Math.round((S-sw)/2), soy=Math.round((S-sh)/2);
 
-      // Step 3: FloodFill BG removal from all borders
-      const bgMask=floodFillBg(d.data,S,50);
+      const raw=document.createElement('canvas');raw.width=S;raw.height=S;
+      const rctx=raw.getContext('2d');
+      rctx.fillStyle='#fff';rctx.fillRect(0,0,S,S);
+      rctx.drawImage(img,sox,soy,sw,sh);
+      let id=rctx.getImageData(0,0,S,S);
 
-      // Step 4: Find product bounding box
-      const bbox=getProductBbox(bgMask,S);
+      // ② White-balance (sample many bright corner pixels)
+      id=wbCorrect(id,S);
 
-      // Step 5: Build output canvas — product placed at centre, scaled to 87% of frame
-      const out=document.createElement('canvas'); out.width=S; out.height=S;
+      // ③ Build BG mask: multi-seed FloodFill with adaptive tolerance
+      const bgMask=buildBgMask(id.data,S);
+
+      // ④ Smooth mask: dilate then erode bg mask to close small holes at edges
+      const smoothedMask=smoothMask(bgMask,S,3);
+
+      // ⑤ Extract product bbox with padding
+      const bb=productBbox(smoothedMask,S);
+      if(bb.empty){resolve(dataUrl);return;}
+
+      // ⑥ Build final canvas: product scaled to 87% of frame, centred
+      const out=document.createElement('canvas');out.width=S;out.height=S;
       const octx=out.getContext('2d');
-      octx.fillStyle='white'; octx.fillRect(0,0,S,S);
+      octx.fillStyle='#fff';octx.fillRect(0,0,S,S);
 
-      const TARGET=0.87; // product occupies 87% of frame
-      const prodW=bbox.x2-bbox.x1, prodH=bbox.y2-bbox.y1;
-      const scale=Math.min((S*TARGET)/prodW,(S*TARGET)/prodH);
-      const dw=Math.round(prodW*scale), dh=Math.round(prodH*scale);
+      const TGT=0.87*S;
+      const pw=bb.x2-bb.x1, ph=bb.y2-bb.y1;
+      const sc=Math.min(TGT/pw, TGT/ph);
+      const dw=Math.round(pw*sc), dh=Math.round(ph*sc);
       const dx=Math.round((S-dw)/2), dy=Math.round((S-dh)/2);
 
-      // Draw product region only (crop src to bbox, scale to target)
-      // Use temporary canvas for the crop
-      const crop=document.createElement('canvas'); crop.width=prodW; crop.height=prodH;
-      const cctx=crop.getContext('2d');
-      cctx.putImageData(d,0,0); // full image
-      const cropData=cctx.getImageData(bbox.x1,bbox.y1,prodW,prodH);
-      // Null out bg pixels in crop
-      for(let y=0;y<prodH;y++){
-        for(let x=0;x<prodW;x++){
-          const idx=(bbox.y1+y)*S+(bbox.x1+x);
-          if(bgMask[idx]){
-            const pi=(y*prodW+x)*4;
-            cropData.data[pi]=255; cropData.data[pi+1]=255;
-            cropData.data[pi+2]=255; cropData.data[pi+3]=255;
+      // ⑦ Copy only fg pixels (bg→transparent) into a temp canvas, then drawImage
+      const fg=document.createElement('canvas');fg.width=pw;fg.height=ph;
+      const fctx=fg.getContext('2d');
+      const fgId=rctx.createImageData(pw,ph);
+      for(let y=0;y<ph;y++){
+        for(let x=0;x<pw;x++){
+          const si=(bb.y1+y)*S+(bb.x1+x);
+          const di=(y*pw+x)*4;
+          if(smoothedMask[si]){
+            fgId.data[di]=255;fgId.data[di+1]=255;fgId.data[di+2]=255;fgId.data[di+3]=255;
+          } else {
+            fgId.data[di]  =id.data[si*4];
+            fgId.data[di+1]=id.data[si*4+1];
+            fgId.data[di+2]=id.data[si*4+2];
+            fgId.data[di+3]=255;
           }
         }
       }
-      cctx.putImageData(cropData,0,0);
-      octx.drawImage(crop,0,0,prodW,prodH,dx,dy,dw,dh);
+      fctx.putImageData(fgId,0,0);
+      octx.drawImage(fg,0,0,pw,ph,dx,dy,dw,dh);
 
-      // Step 6: Smooth edges (feather bg boundary)
+      // ⑧ Multi-pass edge feathering on output
       let od=octx.getImageData(0,0,S,S);
-      od=featherEdges(od,S);
+      od=multiFeather(od,S,3);
       octx.putImageData(od,0,0);
 
-      // Step 7: Soften harsh hotspots (overexposed specular)
+      // ⑨ Soften harsh ring-light hotspots (bright isolated specular)
       od=octx.getImageData(0,0,S,S);
-      softenHotspots(od.data,S);
+      softHotspots(od.data,S);
       octx.putImageData(od,0,0);
 
-      // Step 8: Metal enhancement — boost micro-contrast, clarity, protect highlights
+      // ⑩ Metal clarity: moderate S-curve on product pixels only
       od=octx.getImageData(0,0,S,S);
-      enhanceMetal(od.data,S);
+      metalClarity(od.data,S);
       octx.putImageData(od,0,0);
 
-      // Step 9: Unsharp mask (sharpen edges)
+      // ⑪ Unsharp mask for crispness
       od=octx.getImageData(0,0,S,S);
-      unsharpMask(od.data,S,1.0,0.4);
+      unsharp(od.data,S,0.8,1);
       octx.putImageData(od,0,0);
 
-      // Step 10: Draw contact shadow under product
-      drawContactShadow(octx,S,dx,dy+dh,dw);
+      // ⑫ Subtle contact shadow under product
+      contactShadow(octx,S,dx,dy+dh,dw);
 
-      // Step 11: Final white enforcement (pure RGB 255 bg)
+      // ⑬ Enforce pure white bg (≥248 on all channels → 255)
       od=octx.getImageData(0,0,S,S);
-      enforcePureWhite(od.data,S);
+      for(let i=0;i<od.data.length;i+=4){
+        if(od.data[i]>=248&&od.data[i+1]>=248&&od.data[i+2]>=248){
+          od.data[i]=od.data[i+1]=od.data[i+2]=255;
+        }
+      }
       octx.putImageData(od,0,0);
 
       resolve(out.toDataURL('image/jpeg',.95));
@@ -1633,202 +1646,217 @@ async function localRemoveBg(dataUrl){
   });
 }
 
-// White balance: sample corners, normalise channels
-function whiteBalance(id,S){
-  const d=id.data;
-  let rs=0,gs=0,bs=0,n=0;
-  const sp=(x,y)=>{const i=(y*S+x)*4;rs+=d[i];gs+=d[i+1];bs+=d[i+2];n++;};
-  for(let k=0;k<50;k++){sp(k,k);sp(S-1-k,k);sp(k,S-1-k);sp(S-1-k,S-1-k);}
-  const avg=(rs+gs+bs)/(3*n);
-  const rsc=Math.min(1.6,avg/(rs/n)||1);
-  const gsc=Math.min(1.6,avg/(gs/n)||1);
-  const bsc=Math.min(1.6,avg/(bs/n)||1);
-  for(let i=0;i<d.length;i+=4){
-    d[i]=Math.min(255,Math.round(d[i]*rsc));
-    d[i+1]=Math.min(255,Math.round(d[i+1]*gsc));
-    d[i+2]=Math.min(255,Math.round(d[i+2]*bsc));
+// White balance: find the brightest 10% of pixels and normalise channels to neutral
+function wbCorrect(id,S){
+  const d=id.data; const N=S*S;
+  // Collect brightness samples
+  const bright=[]; // {r,g,b}
+  for(let i=0;i<N;i++){
+    const r=d[i*4],g=d[i*4+1],b=d[i*4+2];
+    if((r+g+b)/3>200)bright.push({r,g,b});
+  }
+  if(!bright.length)return id;
+  const sr=bright.reduce((a,v)=>a+v.r,0)/bright.length;
+  const sg=bright.reduce((a,v)=>a+v.g,0)/bright.length;
+  const sb=bright.reduce((a,v)=>a+v.b,0)/bright.length;
+  const avg=(sr+sg+sb)/3;
+  const rk=Math.min(1.5,avg/Math.max(1,sr));
+  const gk=Math.min(1.5,avg/Math.max(1,sg));
+  const bk=Math.min(1.5,avg/Math.max(1,sb));
+  for(let i=0;i<N;i++){
+    d[i*4]=Math.min(255,Math.round(d[i*4]*rk));
+    d[i*4+1]=Math.min(255,Math.round(d[i*4+1]*gk));
+    d[i*4+2]=Math.min(255,Math.round(d[i*4+2]*bk));
   }
   return id;
 }
 
-// FloodFill BG mask from all border pixels
-function floodFillBg(d,S,tol){
+// Adaptive FloodFill BG mask with two tolerance levels:
+// high-tol seed from borders, then grow with lower tol to catch shadowed bg
+function buildBgMask(d,S){
   const mask=new Uint8Array(S*S);
-  const isBg=idx=>{
+  // Pixel brightness + saturation check
+  const check=(idx,tol)=>{
     const r=d[idx*4],g=d[idx*4+1],b=d[idx*4+2];
-    const bright=(r+g+b)/3;
+    const br=(r+g+b)/3;
     const sat=Math.max(r,g,b)-Math.min(r,g,b);
-    return bright>(255-tol)&&sat<tol*0.9;
+    return br>(255-tol)&&sat<(tol*1.2);
   };
   const q=[];
-  const visit=(x,y)=>{
-    if(x<0||x>=S||y<0||y>=S)return;
-    const idx=y*S+x;
-    if(mask[idx])return;
-    if(isBg(idx)){mask[idx]=1;q.push(x,y);}
+  const seed=(x,y,tol)=>{
+    if(x<0||x>=S||y<0||y>=S||mask[y*S+x])return;
+    if(check(y*S+x,tol)){mask[y*S+x]=1;q.push(x,y);}
   };
-  for(let x=0;x<S;x++){visit(x,0);visit(x,S-1);}
-  for(let y=0;y<S;y++){visit(0,y);visit(S-1,y);}
+  // Seed phase 1: border pixels with generous tolerance (catches grey bg)
+  for(let x=0;x<S;x++){seed(x,0,80);seed(x,S-1,80);}
+  for(let y=0;y<S;y++){seed(0,y,80);seed(S-1,y,80);}
+  // BFS with moderate tolerance
   while(q.length){
     const y=q.pop(),x=q.pop();
-    visit(x-1,y);visit(x+1,y);visit(x,y-1);visit(x,y+1);
+    [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].forEach(([nx,ny])=>{
+      if(nx<0||nx>=S||ny<0||ny>=S||mask[ny*S+nx])return;
+      if(check(ny*S+nx,60)){mask[ny*S+nx]=1;q.push(nx,ny);}
+    });
   }
   return mask;
 }
 
-// Find tight bounding box of non-bg pixels
-function getProductBbox(mask,S){
-  let x1=S,y1=S,x2=0,y2=0;
+// Smooth mask: close jagged edges via morphological operations
+function smoothMask(mask,S,r){
+  // Dilate (expand bg) then erode (shrink back) = closing = fills small fg holes in bg
+  const tmp=new Uint8Array(S*S);
+  // Dilate
   for(let y=0;y<S;y++){
     for(let x=0;x<S;x++){
-      if(!mask[y*S+x]){
-        if(x<x1)x1=x; if(x>x2)x2=x;
-        if(y<y1)y1=y; if(y>y2)y2=y;
+      if(mask[y*S+x]){tmp[y*S+x]=1;continue;}
+      outer:for(let dy=-r;dy<=r;dy++){
+        for(let dx=-r;dx<=r;dx++){
+          const nx=x+dx,ny=y+dy;
+          if(nx<0||nx>=S||ny<0||ny>=S)continue;
+          if(mask[ny*S+nx]){tmp[y*S+x]=1;break outer;}
+        }
       }
     }
   }
-  // Add small padding
-  const pad=4;
-  return{x1:Math.max(0,x1-pad),y1:Math.max(0,y1-pad),x2:Math.min(S,x2+pad),y2:Math.min(S,y2+pad)};
+  // Erode (shrink bg back)
+  const out=new Uint8Array(S*S);
+  for(let y=0;y<S;y++){
+    for(let x=0;x<S;x++){
+      if(!tmp[y*S+x]){out[y*S+x]=0;continue;}
+      let all=true;
+      for(let dy=-r;dy<=r&&all;dy++){
+        for(let dx=-r;dx<=r&&all;dx++){
+          const nx=x+dx,ny=y+dy;
+          if(nx<0||nx>=S||ny<0||ny>=S)continue;
+          if(!tmp[ny*S+nx])all=false;
+        }
+      }
+      out[y*S+x]=all?1:0;
+    }
+  }
+  return out;
 }
 
-// Feather edges: multi-pass smooth boundary pixels toward white
-function featherEdges(id,S){
+// Find tight product bounding box
+function productBbox(mask,S){
+  let x1=S,y1=S,x2=0,y2=0,found=false;
+  for(let y=0;y<S;y++){for(let x=0;x<S;x++){
+    if(!mask[y*S+x]){found=true;
+      if(x<x1)x1=x;if(x>x2)x2=x;if(y<y1)y1=y;if(y>y2)y2=y;
+    }
+  }}
+  if(!found)return{empty:true};
+  const pad=6;
+  return{x1:Math.max(0,x1-pad),y1:Math.max(0,y1-pad),x2:Math.min(S-1,x2+pad),y2:Math.min(S-1,y2+pad),empty:false};
+}
+
+// Multi-pass edge feather: blend boundary pixels toward white
+function multiFeather(id,S,passes){
   const d=id.data;
-  const isWhite=i=>d[i]>248&&d[i+1]>248&&d[i+2]>248;
-  // 2 passes of boundary blending
-  for(let pass=0;pass<2;pass++){
+  const isW=i=>d[i]>=252&&d[i+1]>=252&&d[i+2]>=252;
+  for(let p=0;p<passes;p++){
     for(let y=1;y<S-1;y++){
       for(let x=1;x<S-1;x++){
         const i=(y*S+x)*4;
-        if(!isWhite(i)){
-          const n=[(y-1)*S+x,(y+1)*S+x,y*S+(x-1),y*S+(x+1)];
-          const whiteNeighbours=n.filter(ni=>isWhite(ni*4)).length;
-          if(whiteNeighbours>=2){
-            const f=whiteNeighbours===4?0.7:0.4;
-            d[i]=Math.round(d[i]*(1-f)+255*f);
-            d[i+1]=Math.round(d[i+1]*(1-f)+255*f);
-            d[i+2]=Math.round(d[i+2]*(1-f)+255*f);
-          }
-        }
+        if(isW(i))continue;
+        const nb=[(y-1)*S+x,(y+1)*S+x,y*S+(x-1),y*S+(x+1),
+                  (y-1)*S+(x-1),(y-1)*S+(x+1),(y+1)*S+(x-1),(y+1)*S+(x+1)];
+        const wc=nb.filter(n=>isW(n*4)).length;
+        if(wc===0)continue;
+        const f=Math.min(0.75, wc*0.15);
+        d[i]  =Math.round(d[i]*(1-f)+255*f);
+        d[i+1]=Math.round(d[i+1]*(1-f)+255*f);
+        d[i+2]=Math.round(d[i+2]*(1-f)+255*f);
       }
     }
   }
   return id;
 }
 
-// Soften harsh specular hotspots (overexposed bright patches)
-function softenHotspots(d,S){
-  // Detect pixels that are near-white but surrounded by non-white (specular highlight)
-  const W=S;
-  for(let y=2;y<S-2;y++){
-    for(let x=2;x<S-2;x++){
-      const i=(y*W+x)*4;
-      const r=d[i],g=d[i+1],b=d[i+2];
-      const bright=(r+g+b)/3;
-      if(bright>240){
-        // Check if this is an isolated bright spot (surrounded by darker pixels)
-        let sumBright=0,cnt=0;
-        for(let dy=-2;dy<=2;dy++){
-          for(let dx=-2;dx<=2;dx++){
-            if(dx===0&&dy===0)continue;
-            const ni=((y+dy)*W+(x+dx))*4;
-            sumBright+=(d[ni]+d[ni+1]+d[ni+2])/3; cnt++;
-          }
-        }
-        const neighbourAvg=sumBright/cnt;
-        if(bright-neighbourAvg>35){
-          // Hotspot: blend down toward neighbour average
-          const blend=0.35;
-          d[i]=Math.round(r*(1-blend)+neighbourAvg*blend);
-          d[i+1]=Math.round(g*(1-blend)+neighbourAvg*blend);
-          d[i+2]=Math.round(b*(1-blend)+neighbourAvg*blend);
-        }
+// Soften harsh ring-light / overexposed specular spots
+function softHotspots(d,S){
+  for(let y=3;y<S-3;y++){
+    for(let x=3;x<S-3;x++){
+      const i=(y*S+x)*4;
+      const br=(d[i]+d[i+1]+d[i+2])/3;
+      if(br<230)continue; // only near-white specular
+      // Compute neighbourhood avg
+      let s=0,c=0;
+      for(let dy=-3;dy<=3;dy++){for(let dx=-3;dx<=3;dx++){
+        if(!dx&&!dy)continue;
+        const ni=((y+dy)*S+(x+dx))*4;
+        s+=(d[ni]+d[ni+1]+d[ni+2])/3;c++;
+      }}
+      const nav=s/c;
+      const diff=br-nav;
+      if(diff>40){
+        // Isolated bright spot: pull down toward neighbourhood
+        const blend=Math.min(0.5, diff/120);
+        d[i]  =Math.round(d[i]*(1-blend)+nav*blend);
+        d[i+1]=Math.round(d[i+1]*(1-blend)+nav*blend);
+        d[i+2]=Math.round(d[i+2]*(1-blend)+nav*blend);
       }
     }
   }
 }
 
-// Metal enhancement: boost local contrast (clarity) + protect pure highlights
-function enhanceMetal(d,S){
-  // Micro-contrast: boost pixels that are between shadow and highlight
+// Metal clarity: S-curve on mid-tones, skip bg pixels
+function metalClarity(d,S){
+  const sCurve=v=>{
+    const t=v/255;
+    return Math.round((t<0.5?2*t*t:1-(-2*t+2)**2/2)*255);
+  };
   for(let i=0;i<d.length;i+=4){
-    const r=d[i],g=d[i+1],b=d[i+2];
-    const bright=(r+g+b)/3;
-    // Skip near-white (bg) and very dark pixels
-    if(bright>235||bright<15)continue;
-    // S-curve on mid-tones for metallic snap
-    const f=(v)=>{
-      const t=v/255;
-      // Subtle S-curve: darks a bit darker, mids slightly brighter
-      const curved=t<0.5
-        ? 2*t*t
-        : 1-Math.pow(-2*t+2,2)/2;
-      // Blend 30% toward curved
-      return Math.round((t*0.7+curved*0.3)*255);
-    };
-    d[i]=f(r); d[i+1]=f(g); d[i+2]=f(b);
+    if(d[i]>=250&&d[i+1]>=250&&d[i+2]>=250)continue; // skip bg
+    const br=(d[i]+d[i+1]+d[i+2])/3;
+    if(br<20||br>240)continue; // skip extremes
+    // 30% blend toward s-curve
+    d[i]  =Math.round(d[i]*0.7+sCurve(d[i])*0.3);
+    d[i+1]=Math.round(d[i+1]*0.7+sCurve(d[i+1])*0.3);
+    d[i+2]=Math.round(d[i+2]*0.7+sCurve(d[i+2])*0.3);
   }
 }
 
-// Unsharp mask: sharpen edges for crisp product look
-function unsharpMask(d,S,amount,radius){
-  const W=S;
+// Unsharp mask for crispness
+function unsharp(d,S,amount,radius){
   const orig=new Uint8ClampedArray(d);
-  const R=Math.max(1,Math.round(radius));
-  // Simple box blur for the "blur" layer
-  const blurred=new Float32Array(d.length);
-  for(let y=0;y<S;y++){
-    for(let x=0;x<S;x++){
-      let sr=0,sg=0,sb=0,c=0;
-      for(let dy=-R;dy<=R;dy++){
-        const ny=y+dy; if(ny<0||ny>=S)continue;
-        for(let dx=-R;dx<=R;dx++){
-          const nx=x+dx; if(nx<0||nx>=W)continue;
-          const ni=(ny*W+nx)*4;
-          sr+=orig[ni];sg+=orig[ni+1];sb+=orig[ni+2];c++;
-        }
-      }
-      const i=(y*W+x)*4;
-      blurred[i]=sr/c; blurred[i+1]=sg/c; blurred[i+2]=sb/c;
-    }
-  }
+  const R=Math.max(1,radius);
+  const blur=new Float32Array(d.length);
+  for(let y=0;y<S;y++){for(let x=0;x<S;x++){
+    let sr=0,sg=0,sb=0,c=0;
+    for(let dy=-R;dy<=R;dy++){for(let dx=-R;dx<=R;dx++){
+      const ny=y+dy,nx=x+dx;
+      if(ny<0||ny>=S||nx<0||nx>=S)continue;
+      const ni=(ny*S+nx)*4;sr+=orig[ni];sg+=orig[ni+1];sb+=orig[ni+2];c++;
+    }}
+    const i=(y*S+x)*4;blur[i]=sr/c;blur[i+1]=sg/c;blur[i+2]=sb/c;
+  }}
   for(let i=0;i<d.length;i+=4){
-    const bright=(orig[i]+orig[i+1]+orig[i+2])/3;
-    // Only sharpen non-bg pixels
-    if(bright>238)continue;
-    d[i]=Math.max(0,Math.min(255,Math.round(orig[i]+amount*(orig[i]-blurred[i]))));
-    d[i+1]=Math.max(0,Math.min(255,Math.round(orig[i+1]+amount*(orig[i+1]-blurred[i+1]))));
-    d[i+2]=Math.max(0,Math.min(255,Math.round(orig[i+2]+amount*(orig[i+2]-blurred[i+2]))));
+    if(orig[i]>=250&&orig[i+1]>=250&&orig[i+2]>=250)continue;
+    const br=(orig[i]+orig[i+1]+orig[i+2])/3;
+    if(br>238)continue;
+    d[i]  =Math.max(0,Math.min(255,Math.round(orig[i]+amount*(orig[i]-blur[i]))));
+    d[i+1]=Math.max(0,Math.min(255,Math.round(orig[i+1]+amount*(orig[i+1]-blur[i+1]))));
+    d[i+2]=Math.max(0,Math.min(255,Math.round(orig[i+2]+amount*(orig[i+2]-blur[i+2]))));
   }
 }
 
-// Draw a subtle elliptical contact shadow under the product
-function drawContactShadow(ctx,S,prodX,prodBottom,prodW){
-  const cx=prodX+prodW/2;
-  const cy=prodBottom-Math.round(S*0.008); // just above bottom edge
-  const rx=prodW*0.38;
-  const ry=S*0.018;
-  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,rx);
-  grad.addColorStop(0,'rgba(0,0,0,0.13)');
-  grad.addColorStop(0.5,'rgba(0,0,0,0.06)');
+// Subtle elliptical contact shadow at product base
+function contactShadow(ctx,S,px,py,pw){
+  // py = bottom of product, px = left edge
+  const cx=px+pw/2;
+  const rx=pw*0.36, ry=S*0.016;
+  const grad=ctx.createRadialGradient(cx,py,0,cx,py,rx);
+  grad.addColorStop(0,'rgba(0,0,0,0.10)');
+  grad.addColorStop(0.6,'rgba(0,0,0,0.04)');
   grad.addColorStop(1,'rgba(0,0,0,0)');
   ctx.save();
   ctx.scale(1,ry/rx);
   ctx.beginPath();
-  ctx.arc(cx,cy*rx/ry,rx,0,Math.PI*2);
+  ctx.arc(cx,py*rx/ry,rx,0,Math.PI*2);
   ctx.fillStyle=grad;
   ctx.fill();
   ctx.restore();
-}
-
-// Final pass: ensure bg pixels are RGB(255,255,255) exactly
-function enforcePureWhite(d,S){
-  for(let i=0;i<d.length;i+=4){
-    if(d[i]>245&&d[i+1]>245&&d[i+2]>245){
-      d[i]=255;d[i+1]=255;d[i+2]=255;
-    }
-  }
 }
 
 // ════════════════════════════════════════════════════════════
